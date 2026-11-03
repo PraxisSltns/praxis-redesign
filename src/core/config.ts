@@ -30,6 +30,14 @@ export function apiUrl(path: string, base: string = API_BASE_URL): string {
   return base && path.startsWith("/api/") ? `${base}${path}` : path;
 }
 
+/**
+ * Whether this build has a server to talk to. A static preview with none (Vercel builds with
+ * VITE_BACKEND=none) makes no /api call at all: the looks come from the rules engine, the page never
+ * asks which services are live, and errors aren't reported. Setting VITE_API_BASE_URL brings the server
+ * back, so a preview pointed at staging works without changing this.
+ */
+export const HAS_BACKEND: boolean = env("VITE_BACKEND") !== "none" || API_BASE_URL !== "";
+
 /** Which recommendation adapter answers styling requests. Only "mock" exists today; service.ts falls back to it. */
 export const RECOMMENDATION_ADAPTER: string = env("VITE_RECOMMENDATION_ADAPTER") ?? "mock";
 

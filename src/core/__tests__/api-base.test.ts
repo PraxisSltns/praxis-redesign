@@ -1,6 +1,6 @@
 /** A build served away from the server: /api addresses follow VITE_API_BASE_URL, and the server's CORS list decides who may call. */
 import { describe, expect, it } from "vitest";
-import { apiUrl, API_BASE_URL } from "../config";
+import { apiUrl, API_BASE_URL, HAS_BACKEND } from "../config";
 import { AI_ENDPOINT } from "../ai/http";
 import { TRYON_ENDPOINT } from "../adapters/tryonHttp";
 import { ERROR_ENDPOINT } from "../monitoring";
@@ -32,6 +32,10 @@ describe("the server's address in the page", () => {
     expect(TRYON_ENDPOINT).toBe("/api/tryon");
     expect(ERROR_ENDPOINT).toBe("/api/client-error");
     expect(apiUrl("/api/visuals/img_0123456789abcdef01234567.jpg")).toBe("/api/visuals/img_0123456789abcdef01234567.jpg");
+  });
+
+  it("has a server unless the build says VITE_BACKEND=none", () => {
+    expect(HAS_BACKEND).toBe(true);
   });
 
   it("puts the base in front of /api paths only", () => {

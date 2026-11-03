@@ -5,7 +5,7 @@
  * happened, the path without its query, and up to five stack frames from the app's own files. Never
  * the message, which could hold something personal, and never a photo or an address.
  */
-import { APP_VERSION, apiUrl } from "./config";
+import { APP_VERSION, apiUrl, HAS_BACKEND } from "./config";
 import { session, readJson, writeJson } from "./ids";
 
 export const ERROR_ENDPOINT = apiUrl("/api/client-error");
@@ -62,6 +62,8 @@ function beacon(body: string): void {
 
 /** Listens for errors nothing else caught. Called once at start. */
 export function watchErrors(): void {
+  // A preview with no server has nowhere to send reports (VITE_BACKEND=none).
+  if (!HAS_BACKEND) return;
   window.addEventListener("error", (e) => reportError(e.error ?? { name: "ScriptError" }, "window"));
   window.addEventListener("unhandledrejection", (e) => reportError(e.reason, "promise"));
 }
