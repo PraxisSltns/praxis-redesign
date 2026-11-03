@@ -63,3 +63,58 @@ Run on 2026-11-03 on `b4421f0` (main, 2026-10-29), macOS, Node 22.23.2, npm 10.9
 9. **Table names.** `docs/data-schemas.md` §9.2 names `users`, `consents`, `wardrobe_items`, `feedback` and `saved_looks` (not `looks`), plus `anonymous_sessions`, `style_profiles`, `styling_requests`, `recommendations`, `selections`, `image_assets` and `analytics_events`. It has no retailer, product or variant tables ("out of scope"). Phase 2 will need new names for those.
 10. **Slots.** In the ontology (`src/shared/ontology.mjs`) the slots are `top`, `bottom`, `shoes` and `extras`. A jacket is slot `top` with layer `outer`, not a slot of its own. Phase 3's "top, bottom, shoes, jacket" would mean either adding a slot or mapping on (slot, layer).
 11. **DECISIONS still has two placeholders:** the first retailer (`<SHOPIFY STORE DOMAIN or CSV PATH>`) and the merge token (`GitHub App` or `MERGE_TOKEN` PAT).
+
+## Phase 1: branches, CI/CD, dev environment
+
+Run on 2026-11-03 and 2026-11-04, on local branch `dev` (not pushed). Phase 0's defaults were used for the open decisions: the paid image switch stays as it is and no Gemini key is set on staging, staging is a new Railway environment, the docs are the source of truth, and the merge token is a fine-grained PAT in `MERGE_TOKEN`.
+
+### What was done
+
+| Commit | What it adds |
+|---|---|
+| `b6047c1` | `.github/workflows/ci.yml` (job `test`: npm ci, unit tests, build; job `open-pr`: after a green push to dev, opens or updates the one dev -> main PR as github-actions[bot]), `.github/workflows/automerge.yml` (on an approved review of dev -> main, `gh pr merge --merge` with `MERGE_TOKEN`, a comment if refused), `docs/deploy/ci.md` (the flow and the exact `gh` commands) |
+| `3c26481` | `VITE_API_BASE_URL` and `apiUrl()` (`src/core/config.ts`) for every `/api` call and `/api` picture; `server/cors.mjs` with `CORS_ORIGINS` (exact origins, credentials, preflight); 6 unit tests |
+| `13c56be` | `docker-compose.yml` (Postgres 16 + pgvector 0.8.0, Redis 7.4, SeaweedFS for S3, a bucket job), `.env.example`, `!.env.example` in `.gitignore`, `.env` kept out of the Docker image (`.dockerignore`), npm scripts `dev:up`, `dev:down`, `dev:reset`, `db:migrate`, `db:seed`, `dev:api`, `docs/development.md` |
+| `24a049c` | `railway.json` (Dockerfile, `npm run start`, health check `/api/health`, restart on failure, watch paths that skip docs, tests, video and tools; pre-deploy `npm run db:migrate` for the `staging` environment only), `docs/deploy/railway.md` |
+| `d7dee01` | `vercel.json` (mock build, `dist`, SPA rewrite except `/api`, `main` never deploys), `VITE_BACKEND=none` so a preview with no server makes no `/api` call, `tools/preview-check.mjs`, `docs/deploy/vercel.md` |
+
+### Checks
+
+| Check | Result | Evidence |
+|---|---|---|
+| Unit tests and build after the changes | pass | `npm test`: `Test Files 21 passed (21)`, `Tests 287 passed (287)`; `npm run build`: `built in 4.18s` |
+| No regression in the browser scenarios (normal build, real server) | pass, same as baseline | `npm run build && npm run e2e`: `246 of 247 runs passed; 2423 of 2424 checks passed`, the same as Phase 0. The only failure is again the flaky `TRY5 phone` |
+| Workflows parse | pass | `python3 -c "import yaml; ..."` on both files: `yaml ok`. actionlint isn't installed here, so GitHub's own parse on the first push is the real check |
+| A red push gives a red `test`, no PR update, merge blocked | not run | needs `dev` pushed and the branch protection in `docs/deploy/ci.md` applied |
+| A green push opens or updates the PR as github-actions[bot] | not run | same |
+| Approval merges, ci.yml runs on main, Railway deploys | not run | same, plus the Railway staging setup; Sami confirms the Railway side |
+| CORS on the real gateway | pass | `CORS_ORIGINS=http://localhost:5173`: preflight from that origin `204` with `Access-Control-Allow-Origin: http://localhost:5173` and `-Credentials: true`; from `https://evil.example` `403` with no CORS headers; `GET /api/ai` keeps `{"live":[]}` and gets `Vary: Origin, Accept-Encoding`; `/api/health` unchanged |
+| Vercel build works with no gateway: journeys | pass | build with the `vercel.json` command, `vite preview` on :4174, `node tools/preview-check.mjs`: 18 of 18 journeys (home, first question, build to results, results with next look and why, try-on, Style DNA, saved looks, wardrobe, your data; desktop and phone) with no `/api` request, no console error and no error screen. The same probe against a build without `VITE_BACKEND=none` fails with `called the server: GET /api/ai`, so it does detect the problem |
+| Vercel build works with no gateway: full scenarios | pass, expected failures only | `BASE_URL=http://localhost:4174 npm run e2e` against the `vercel.json` build: `234 of 247 runs passed; 2313 of 2363 checks passed`, with no "no page errors" failure left. The 13 failing runs all need a server by design. Suite 14 (hybrid catalogue, 10 runs) stands in for a store behind `/api/ai`, which a `VITE_BACKEND=none` build never calls. Suite 12 P3-12b and P4-12e call the server's API directly from node and get HTML or nothing. The last is the flaky TRY5 phone |
+| `npm run dev:up` brings every container up healthy | pass | `docker compose ps`: postgres, redis and s3 `Up (healthy)`; s3-bucket `Exited (0)` after `make_bucket: praxis-local` |
+| `CREATE EXTENSION vector` works locally | pass | `CREATE EXTENSION`; `extversion 0.8.0`; `'[1,2,3]'::vector <=> '[1,2,4]'::vector` = `0.0085`; `server_version 16.10` |
+| `dev:reset` starts empty, `dev:api` reads `.env` | pass | after reset the vector extension count is `0` (volume wiped); `npm run dev:api` serves on :3000 and a preflight from :5173 gets `204` (CORS_ORIGINS from `.env`) |
+
+### Found on the way
+
+1. **MinIO can't be pulled.** `minio/minio`, `minio/mc` (Docker Hub: "pull access denied ... repository does not exist") and `quay.io/minio/minio` ("unauthorized") all refuse, while `redis:7.4-alpine` pulls fine. Local S3 is SeaweedFS 4.50 (Apache 2.0) instead, checked for bucket creation, upload, list and refusal of a wrong key (`InvalidAccessKeyId`). The gateway will use a plain S3 client, so the Railway bucket works the same way. This changes the "MinIO locally" decision.
+2. **A preview with no server used to log a failed request on every journey.** Run against `vite preview` before the `VITE_BACKEND` change, the scenarios had 2399 of 2550 checks passing and 97 of 247 runs. Almost every failed run was the "no page errors" check catching `Failed to load resource: 404` from `GET /api/ai`. The page itself was fine. `VITE_BACKEND=none` now skips that call and the error reporter in such a build.
+3. **`railway.json` applies to every service built from this repository**, including the existing `praxis-redesign-production`. That's why the migration step is set under `environments.staging` only. The existing service gains the health check, restart policy and watch paths, and otherwise stays the same.
+4. **The existing service deploys from `main`.** Once the flow is on, every approved release PR deploys it as well as staging, unless its trigger is changed. The same goes for `visual-demo.yml`: a merged PR that touches `.github/visual-demo-request.txt` makes up to three paid outfit pictures on that service, within its approved budget.
+5. **`.env` would have been copied into a locally built Docker image** (`.dockerignore` didn't list it). It's listed now.
+6. **TRY5 phone is flaky.** It failed again in the preview run. It passes alone.
+7. **`npm run e2e` will quietly test against whatever is already on port 4173.** It starts its own server with output ignored. If an old server still holds the port (here one left behind by the stopped Phase 0 run), the new one can't bind, and the suite tests the old process. That old process serves an `index.html` whose assets a rebuild has deleted, so the run hangs with no screenshots. Workaround: `lsof -ti :4173 | xargs kill` before running. A fix (fail when the port is taken) is an open item.
+
+### By hand (Sami or a repository admin)
+
+1. Push `dev`: `git push -u origin dev`.
+2. Run the `gh` commands in `docs/deploy/ci.md` §1 to §6: default branch, the Actions setting, merge commits, `main` and `dev` protection, the `MERGE_TOKEN` secret.
+3. Then run the three flow checks in `docs/deploy/ci.md` "Checking it works". I can push the failing and green commits once `dev` is protected and you say so.
+4. Railway: the steps in `docs/deploy/railway.md`, once the written spend approval exists.
+5. Vercel: the steps in `docs/deploy/vercel.md`.
+
+### Open items
+
+- The three CI flow checks (waiting on the push and the settings).
+- What the existing `praxis-redesign-production` service becomes (finding 4).
+- The `ai` service on Railway once `services/ai` exists (Phase 3).
