@@ -17,6 +17,19 @@ function env(name: string): string | undefined {
   }
 }
 
+/**
+ * Where this app's server is, for a build served from somewhere else (a Vite dev server, a preview host).
+ * Empty (the default): the page calls its own origin, as on Railway. Set: every /api call and every
+ * /api picture goes to this address instead, for example http://localhost:3000. The server must list
+ * the page's origin in CORS_ORIGINS. An address only: never put a key or secret in a VITE_ variable.
+ */
+export const API_BASE_URL: string = (env("VITE_API_BASE_URL") ?? "").replace(/\/+$/, "");
+
+/** A path on this app's server (/api/...) made absolute when API_BASE_URL is set; anything else unchanged. */
+export function apiUrl(path: string, base: string = API_BASE_URL): string {
+  return base && path.startsWith("/api/") ? `${base}${path}` : path;
+}
+
 /** Which recommendation adapter answers styling requests. Only "mock" exists today; service.ts falls back to it. */
 export const RECOMMENDATION_ADAPTER: string = env("VITE_RECOMMENDATION_ADAPTER") ?? "mock";
 

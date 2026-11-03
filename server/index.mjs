@@ -5,6 +5,9 @@
  *
  * It also answers POST /api/tryon, the plug-in point for a real try-on engine (server/tryon.mjs). With
  * no provider set up, the default, it answers that no engine is connected and calls nothing.
+ *
+ * A page served from another origin (built with VITE_API_BASE_URL) may call /api only from an origin
+ * listed in CORS_ORIGINS (server/cors.mjs).
  */
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
@@ -15,6 +18,7 @@ import { handleTryOn } from "./tryon.mjs";
 import { handleAi, liveServices } from "./ai.mjs";
 import { handleVisual } from "./visuals.mjs";
 import { handleClientError, health, logError, RELEASE } from "./monitor.mjs";
+import { applyCors } from "./cors.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("../dist", import.meta.url)));
 const PORT = Number(process.env.PORT ?? 3000);
@@ -57,7 +61,7 @@ function send(req, res, status, headers, body) {
     out = gzipSync(out);
     headers["Content-Encoding"] = "gzip";
   }
-  headers["Vary"] = "Accept-Encoding";
+  headers["Vary"] = res.getHeader("Vary") ? `${res.getHeader("Vary")}, Accept-Encoding` : "Accept-Encoding";
   headers["Content-Length"] = out.length;
   res.writeHead(status, headers);
   res.end(req.method === "HEAD" ? undefined : out);
@@ -105,6 +109,8 @@ function file(req, res, path, stat) {
 }
 
 function route(req, res) {
+  /* A page served from another origin (VITE_API_BASE_URL) may call /api when CORS_ORIGINS lists it (server/cors.mjs). */
+  if (req.url?.startsWith("/api/") && applyCors(req, res)) return;
   /* The try-on plug-in point (server/tryon.mjs); answers "disabled" until a provider is set up. */
   if (req.url?.split("?")[0] === "/api/tryon") {
     if (req.method !== "POST") {

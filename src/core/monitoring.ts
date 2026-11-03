@@ -5,10 +5,10 @@
  * happened, the path without its query, and up to five stack frames from the app's own files. Never
  * the message, which could hold something personal, and never a photo or an address.
  */
-import { APP_VERSION } from "./config";
+import { APP_VERSION, apiUrl } from "./config";
 import { session, readJson, writeJson } from "./ids";
 
-export const ERROR_ENDPOINT = "/api/client-error";
+export const ERROR_ENDPOINT = apiUrl("/api/client-error");
 const SENT_KEY = "praxis_errors_sent";
 /** At most this many reports per tab, so one broken page cannot send a stream. */
 const PER_TAB = 5;

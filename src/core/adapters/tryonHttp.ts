@@ -5,10 +5,11 @@
  * screen sees it. Billable: it only runs when the deployment allows paid image calls, and the server
  * has its own switch as well.
  */
+import { apiUrl } from "../config";
 import { newId } from "../ids";
 import type { GeneratedImage, TryOnAdapter } from "../vision";
 
-export const TRYON_ENDPOINT = "/api/tryon";
+export const TRYON_ENDPOINT = apiUrl("/api/tryon");
 
 const STATUSES = new Set(["ready", "pending", "failed", "disabled"]);
 
