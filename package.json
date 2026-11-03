@@ -9,9 +9,15 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "node server/index.mjs",
+    "dev:api": "node --env-file-if-exists=.env server/index.mjs",
     "test": "vitest run",
     "e2e": "node e2e/scenarios.mjs",
-    "photos:check": "vitest run src/config"
+    "photos:check": "vitest run src/config",
+    "dev:up": "docker compose up -d --wait",
+    "dev:down": "docker compose down",
+    "dev:reset": "docker compose down -v && docker compose up -d --wait",
+    "db:migrate": "node -e \"console.log('No migrations yet: they arrive with server/db/migrations (Week 1, phase 2).')\"",
+    "db:seed": "node -e \"console.log('No seed data yet: it arrives with server/db (Week 1, phase 2).')\""
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.1.0",

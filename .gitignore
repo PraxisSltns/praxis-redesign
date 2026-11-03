@@ -6,3 +6,4 @@ dist/
 *.log
 video/.frames/
 e2e/results/
+!.env.example

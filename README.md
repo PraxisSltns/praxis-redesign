@@ -15,6 +15,8 @@ npm run photos:check  # the home occasion photos
 
 Node 22 or newer.
 
+The backend's local dependencies (Postgres with pgvector, Redis, S3-compatible storage) run in Docker: `npm run dev:up`. See `docs/development.md`. Branches, CI and deploys: `docs/deploy/`.
+
 ## What it is
 
 One full-viewport stage. The left column asks one question at a time; the right column is a living 3:4 print that previews the occasion, darkens for night, ghosts the chosen feel, builds the three looks in place, holds the result, and wipes to the try-on. Nothing routes away from the stage; every step is a URL so Back and reload work.
