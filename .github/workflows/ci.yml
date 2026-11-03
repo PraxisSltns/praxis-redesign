@@ -1,0 +1,73 @@
+# Tests and builds every push to dev and main and every pull request into main. The job named "test" is
+# the check branch protection requires on main, so keep its name. After a green push to dev, "open-pr"
+# opens the one dev -> main pull request, or refreshes its body, as github-actions[bot], so a person can
+# approve it (automerge.yml then merges it). No secrets are used; no paid service can be reached.
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  open-pr:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Open or update the dev -> main pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          commits=$(git log --oneline origin/main..origin/dev)
+          if [ -z "$commits" ]; then
+            echo "dev has nothing main lacks; no pull request needed."
+            exit 0
+          fi
+          {
+            echo "Commits on dev that main does not have yet:"
+            echo
+            echo '```'
+            echo "$commits"
+            echo '```'
+            echo
+            echo "Tests and build passed: $RUN_URL"
+            echo
+            echo "Approving this pull request merges it (automerge.yml), and Railway deploys staging from main."
+          } > body.md
+          number=$(gh pr list --base main --head dev --state open --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --body-file body.md
+            echo "Updated pull request #$number."
+          else
+            gh pr create --base main --head dev --title "Release dev to main" --body-file body.md
+          fi

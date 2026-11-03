@@ -1,0 +1,40 @@
+# Merges the dev -> main pull request once a person approves it, with a merge commit so dev and main never
+# diverge. It uses MERGE_TOKEN (a fine-grained token with contents and pull requests write on this repo),
+# not GITHUB_TOKEN: a merge made with GITHUB_TOKEN starts no workflow, so ci.yml would never run on main
+# and Railway's "Wait for CI" would have nothing to wait for. Branch protection still decides: if "test"
+# isn't green the merge is refused, and this job says so on the pull request.
+name: Automerge
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    if: >-
+      github.event.review.state == 'approved' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Merge the pull request
+        env:
+          GH_TOKEN: ${{ secrets.MERGE_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The MERGE_TOKEN secret is not set; see docs/deploy/ci.md."
+            exit 1
+          fi
+          if ! out=$(gh pr merge "$PR" --repo "$REPO" --merge 2>&1); then
+            echo "$out"
+            gh pr comment "$PR" --repo "$REPO" --body "Approved, but the merge was refused: \`$(echo "$out" | head -1)\`. Usually the \"test\" check isn't green yet or failed. Once it passes, approve again (or merge by hand)."
+            exit 1
+          fi
+          echo "$out"
