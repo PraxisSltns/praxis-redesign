@@ -1,6 +1,6 @@
 # Praxis architecture (Concept A)
 
-This document describes what the code in this repository does today. It is written from the source, not from plans. Everything runs in the browser: there is no server, no database and no network call to any recommendation, image, retailer, payment or analytics provider in this repository. Where a part is a stand-in, the section says so and names the interface in code that a real implementation plugs into.
+This document describes what the code in this repository does today. It is written from the source, not from plans. The app runs in the browser and keeps its data there. A plain Node server (`server/index.mjs`) serves the build and the `/api` plug-in points. Since Week 1 (2026-11) it also has a Postgres database with pgvector and a Redis client, which `/api/health` checks (`docs/development.md`, `docs/data-schemas.md` section 9), but no screen uses them yet. No recommendation, retailer, payment or analytics provider is called from this repository unless its switch is on (`docs/AI-HANDOVER.md`). Where a part is a stand-in, the section says so and names the interface in code that a real implementation plugs into.
 
 Deliverable B of the master spec (section 23) asks for a diagram showing the frontend, the recommendation service, the mock adapter, the future Gemini adapter, the image-processing adapters, the product catalogue, user profiles, wardrobe data and analytics. That diagram is below, followed by one section per box and the lifecycle of a styling request.
 

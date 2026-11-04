@@ -19,6 +19,9 @@ import { handleAi, liveServices } from "./ai.mjs";
 import { handleVisual } from "./visuals.mjs";
 import { handleClientError, health, logError, RELEASE } from "./monitor.mjs";
 import { applyCors } from "./cors.mjs";
+import { closeDb } from "./db.mjs";
+import { dependencies, statusFor } from "./health.mjs";
+import { closeRedis } from "./redis.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("../dist", import.meta.url)));
 const PORT = Number(process.env.PORT ?? 3000);
@@ -159,8 +162,15 @@ function route(req, res) {
   /* Outfit pictures made by the image provider (server/visuals.mjs). */
   const picture = /^\/api\/visuals\/(img_[0-9a-f]{24})\.jpg$/.exec(pathname);
   if (picture) return handleVisual(req, res, picture[1]);
+  /* The build, the switches, and whether Postgres and Redis answer: 503 when a configured one is down (server/health.mjs). */
   if (pathname === "/api/health") {
-    return send(req, res, 200, { "Content-Type": TYPES[".json"], "Cache-Control": "no-store" }, JSON.stringify(health()));
+    void dependencies()
+      .catch(() => ({ db: "down", redis: "down" }))
+      .then((deps) => {
+        const status = statusFor(deps);
+        send(req, res, status, { "Content-Type": TYPES[".json"], "Cache-Control": "no-store" }, JSON.stringify({ ...health(), ok: status === 200, dependencies: deps }));
+      });
+    return;
   }
   const path = normalize(join(ROOT, pathname));
   if (path !== ROOT && !path.startsWith(ROOT + sep)) {
@@ -195,5 +205,13 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 process.on("unhandledRejection", (err) => logError("server_error", { name: err?.name ?? "Error", where: "unhandled_rejection" }));
+
+/* Railway stops a deploy with SIGTERM: finish open requests, then close the database pool and Redis. */
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.once(signal, () => {
+    server.close(() => void Promise.allSettled([closeDb(), closeRedis()]).then(() => process.exit(0)));
+    setTimeout(() => process.exit(0), 10_000).unref();
+  });
+}
 
 server.listen(PORT, () => console.log(`Praxis ${RELEASE.version} (${RELEASE.commit}) on :${PORT}`));
