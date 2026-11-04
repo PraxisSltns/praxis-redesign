@@ -3,7 +3,7 @@
  *
  *   npm run retailers:import -- --shopify www.example.com [--name "Example"] [--currency USD]
  *   npm run retailers:import -- --csv path/to/catalogue.csv [--name "Example"]
- *   npm run retailers:import -- --fixtures        the test store and the sample CSV, no network (npm run db:seed)
+ *   npm run retailers:import -- --fixtures        the test store, the sample CSV and the library pieces, no network (npm run db:seed)
  *   add --report out.json to keep the full report as JSON
  *
  * Exits 1 if an import fails; the database is left as it was for that retailer.
@@ -17,6 +17,7 @@ import { describeReport, importRetailer } from "./import.mjs";
 import { createShopifyConnector } from "./shopify.mjs";
 
 const SAMPLE_CSV = fileURLToPath(new URL("./fixtures/sample.csv", import.meta.url));
+const LIBRARY_CSV = fileURLToPath(new URL("./fixtures/library.csv", import.meta.url));
 
 /** The e2e test store (e2e/fixtures/test-store.mjs) answered from memory, so seeding needs no network. */
 export async function fixtureStoreFetcher() {
@@ -32,6 +33,8 @@ export async function connectorsFor(values) {
     return [
       createShopifyConnector({ store: "test-tailors.praxis-test.example", fetcher: await fixtureStoreFetcher() }),
       createCsvConnector({ path: SAMPLE_CSV, name: "Harbour & Hide (sample CSV)", id: "csv:sample" }),
+      // Pieces cut from the library photographs (tools/fixture-images.mjs), for testing cut-outs and search.
+      createCsvConnector({ path: LIBRARY_CSV, name: "Praxis Library (fixture)", id: "csv:library" }),
     ];
   }
   if (values.shopify) return [createShopifyConnector({ store: values.shopify, name: values.name ?? null, currency: values.currency ?? "USD" })];
