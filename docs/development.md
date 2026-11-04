@@ -12,7 +12,7 @@ cd praxis-redesign
 npm ci
 cp .env.example .env        # local defaults; .env is git-ignored
 npm run dev:up              # Postgres, Redis and storage, waits until all are healthy
-npm run db:migrate          # the database tables (a placeholder until the migrations land)
+npm run db:migrate          # the database tables
 npm run dev                 # the page on http://localhost:5173
 ```
 
@@ -34,7 +34,9 @@ Then either open http://localhost:3000 (page and gateway on one origin, like Rai
 | `npm run dev:up` | Starts the containers and waits until each health check passes. The `s3-bucket` job creates the bucket and exits. |
 | `npm run dev:down` | Stops the containers and keeps the data. |
 | `npm run dev:reset` | Stops the containers, **deletes their volumes** (database, Redis, bucket) and starts them again empty. |
-| `npm run db:migrate` | Applies the database migrations (`server/db/migrations`). |
+| `npm run db:migrate` | Applies the database migrations (`server/db/migrations`, node-pg-migrate, SQL files). |
+| `npm run db:migrate:down` | Rolls back the last migration (`-- 1000` rolls back all of them). |
+| `npm run db:migrate:create -- <name>` | Makes a new SQL migration file with `-- Up Migration` and `-- Down Migration` sections. |
 | `npm run db:seed` | Loads local sample data. |
 | `npm run dev:api` | The gateway with `.env` loaded (`npm start` is what Railway runs, with no `.env`). |
 | `npm test`, `npm run build`, `npm run e2e` | Unit tests, typecheck and build, the browser scenarios (see `docs/testing-report.md`). |
@@ -43,12 +45,12 @@ Then either open http://localhost:3000 (page and gateway on one origin, like Rai
 
 | Service | Image | Port | Health check |
 |---|---|---|---|
-| `postgres` | `pgvector/pgvector:0.8.0-pg16` | 5432 | `pg_isready` |
+| `postgres` | `pgvector/pgvector:0.8.0-pg16` | 5433 | `pg_isready` |
 | `redis` | `redis:7.4-alpine` (append-only file on) | 6379 | `redis-cli ping` |
 | `s3` | `chrislusf/seaweedfs:4.50` (S3 API) | 8333 | `GET /healthz` |
 | `s3-bucket` | `amazon/aws-cli:2.39.3` | none | runs once, creates `S3_BUCKET` |
 
-Ports can be moved with `POSTGRES_PORT`, `REDIS_PORT` and `S3_PORT` in `.env` if something else on your machine uses them. Update the matching `DATABASE_URL`, `REDIS_URL` and `S3_ENDPOINT` too.
+Postgres is published on **5433**, not 5432, so it doesn't clash with a Postgres already installed on the machine (a Homebrew `postgresql@14` on 5432 was answering in its place). Ports can be moved with `POSTGRES_PORT`, `REDIS_PORT` and `S3_PORT` in `.env` if something else on your machine uses them. Update the matching `DATABASE_URL`, `REDIS_URL` and `S3_ENDPOINT` too.
 
 The decision was MinIO for local storage. MinIO no longer publishes its images: Docker Hub refuses `minio/minio` and `minio/mc`, and quay.io refuses `quay.io/minio/minio` (checked 2026-11-03). SeaweedFS (Apache 2.0) speaks the same S3 API, so code that talks to it with an S3 client talks to a Railway bucket the same way.
 
@@ -56,7 +58,8 @@ Useful checks:
 
 ```bash
 docker compose ps
-docker compose exec postgres psql -U praxis -d praxis -c "CREATE EXTENSION IF NOT EXISTS vector;"
+docker compose exec postgres psql -U praxis -d praxis -c "\dt"
+curl -s localhost:3000/api/health   # "dependencies": {"db": "up", "redis": "up"} with npm run dev:api
 docker compose exec redis redis-cli ping
 docker compose run --rm s3-bucket   # make the bucket again (safe if it exists)
 ```

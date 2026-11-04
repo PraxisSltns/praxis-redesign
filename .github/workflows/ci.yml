@@ -21,6 +21,23 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      # The same Postgres and pgvector as docker-compose.yml and Railway.
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_USER: praxis
+          POSTGRES_PASSWORD: praxis
+          POSTGRES_DB: praxis
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U praxis -d praxis"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://praxis:praxis@localhost:5432/praxis
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,6 +47,14 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      # Every migration applies, rolls back to an empty database, and applies again.
+      - name: Migrations up, down, up
+        run: |
+          npm run db:migrate
+          npm run db:migrate:down -- 1000
+          tables=$(psql "$DATABASE_URL" -tAc "select count(*) from pg_tables where schemaname = 'public' and tablename <> 'pgmigrations'")
+          if [ "$tables" != "0" ]; then echo "::error::$tables tables left after migrating down"; exit 1; fi
+          npm run db:migrate
 
   open-pr:
     needs: test

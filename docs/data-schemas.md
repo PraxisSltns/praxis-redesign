@@ -1,6 +1,6 @@
 # Data schemas (deliverable D)
 
-This document lists every record Praxis stores and the shape of each, read from the code. There is no server and no database. Everything Praxis keeps lives in the visitor's browser, in `localStorage` (kept on the device between visits) or `sessionStorage` (kept for the tab only and gone when the tab closes). The last section is a proposal for the tables a backend would need. None of those tables exist yet.
+This document lists every record Praxis stores and the shape of each, read from the code. The app still keeps everything in the visitor's browser. The server's database tables exist (section 9, `server/db/migrations`), but no screen reads or writes them yet. In the browser, data lives in `localStorage` (kept on the device between visits) or `sessionStorage` (kept for the tab only and gone when the tab closes). The last section is a proposal for the tables a backend would need. None of those tables exist yet.
 
 ## Contents
 
@@ -544,9 +544,18 @@ Records that already belong to another account are never changed. An `account_mi
 
 Single photos can be deleted on their own (`deletePhoto`, `src/a/screens/YourData.tsx:35`). Saved looks can be removed one by one, and a feedback record can be taken back with Undo (4.8). There is no other per-record delete for feedback, and none for selections, history, wardrobe entries or events, other than "Delete everything" and the internal page's clear button for events (`forgetWardrobeItem`, `src/core/data.ts:151`, exists but no screen calls it).
 
-## 9. Proposed server schema (not built)
+## 9. Server schema
 
-> This section is a proposal. No server, API or database exists in this repository. The tables below are derived only from the shapes above, to show what a backend would need to hold the same data. Names, types and keys are suggestions. Nothing here is implemented.
+> **Built (Week 1, 2026-11):** `users`, `consents`, `wardrobe_items`, `saved_looks` and `feedback` (9.2), and the catalogue tables `retailers`, `products` and `product_variants` (9.5). They live in Postgres 16 with pgvector, are created by the SQL migrations in `server/db/migrations` (`npm run db:migrate`), and CI applies, rolls back and re-applies them on every push. No screen uses them yet. **Still proposals:** `anonymous_sessions`, `style_profiles`, `styling_requests`, `recommendations`, `selections`, `image_assets` and `analytics_events`.
+>
+> Where the built tables differ from the proposal below, the migration is right:
+>
+> - Every id is a text primary key in the app's `prefix_...` format.
+> - Enums are `text` columns with `CHECK` constraints, not Postgres enum types.
+> - `users.email` is unique regardless of case, and `users` gains `updated_at`.
+> - `wardrobe_items` is keyed by `wardrobe_item_id` alone (ids are random). It also allows `source = 'described'` and adds `colour` and `updated_at`, as `WardrobeEntry` does today. It has no `image_asset_id` yet.
+> - `consents.category` is free text, so the account consents of sign-up can join the image categories.
+> - `saved_looks.request_id` and `recommendation_id` have no foreign key, because the styling history stays in the browser for now.
 
 ### 9.1 Where it would plug in
 
@@ -807,6 +816,43 @@ From `PraxisAnalyticsEvent` (4.9). In code this would be fed by a new `Analytics
 | `test_mode` | text, nullable | `testMode` (rows with a value are excluded from measures) |
 
 Retention: 90 days (`RETENTION.events`).
+
+### 9.5 The product catalogue (built)
+
+Filled by retailer imports (`server/retailers`, Week 1 phase 3). Migration `1762200000300_retailers-products-variants.sql`.
+
+`retailers`: `retailer_id` (primary key), `name`, `kind` (`shopify` or `csv`), `source` (store address or file), `currency`, `created_at`, `last_imported_at`.
+
+`products`: one retailer's piece. Unique on (`retailer_id`, `external_id`), so an import updates a piece in place.
+
+| Column | Type | Notes |
+|---|---|---|
+| `product_id` | id, primary key | |
+| `retailer_id` | id, references `retailers`, cascade | |
+| `external_id` | text | the retailer's own id |
+| `title`, `brand`, `description`, `product_url` | text | |
+| `images` | json array | the retailer's photos |
+| `slot`, `layer`, `subcategory` | text | from the shared ontology (`src/shared/ontology.mjs`); `slot` is `top`, `bottom`, `shoes` or `extras` (a jacket is `top` with `layer = 'outer'`); null when the piece doesn't map, and such a piece is never styled |
+| `colour` | text | colour family |
+| `price_amount`, `currency` | numeric(12,2), char(3) | the lowest variant price |
+| `cutout_url` | text, nullable | the cut-out PNG in the bucket (Week 1 phase 4) |
+| `embedding` | vector(768), nullable | normalised image embedding; HNSW index with `vector_cosine_ops` |
+| `first_seen_at`, `last_seen_at`, `updated_at` | time | |
+| `removed_at` | time, nullable | set when the piece leaves the feed; it is never deleted |
+
+`product_variants`: size, price and stock. Unique on (`product_id`, `external_id`).
+
+| Column | Type | Notes |
+|---|---|---|
+| `variant_id` | id, primary key | |
+| `product_id` | id, references `products`, cascade | |
+| `external_id`, `size`, `colour`, `sku` | text | |
+| `price_amount`, `currency` | numeric(12,2), char(3) | |
+| `available` | boolean | in stock |
+| `stock_quantity` | integer, nullable | null when the retailer only says in or out (Shopify's public list) |
+| `updated_at` | time | |
+
+A partial index on (`product_id`, `size`) where `available` serves "in stock in my size".
 
 ### 9.3 Not carried to a server
 
