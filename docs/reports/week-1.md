@@ -149,10 +149,14 @@ Table names follow `docs/data-schemas.md`: `wardrobe_items` (the brief's "wardro
 
 1. **A Postgres already installed on this machine was answering on 5432.** A Homebrew `postgresql@14` listens on `127.0.0.1:5432` and won over Docker's port, so the first migration got `role "praxis" does not exist`. Local Postgres is now published on 5433 (`docker-compose.yml`, `.env.example`, `docs/development.md`). CI and Railway are unaffected.
 2. **On Railway, a 503 now fails the deploy's health check.** In staging, a deploy whose Postgres or Redis is unreachable won't go live, which is the intent. The existing service has neither configured, so it reports `off` and stays at 200.
-3. **`npm audit` lists findings in existing dev tools** (vitest's mocker, `serve`'s compression, esbuild under Vite). They are the same before and after adding pg, redis and node-pg-migrate. None are fixed here, because the fixes are breaking major upgrades. Open item.
+3. **`npm audit` (lockfile only) goes from 15 findings to 17.** Before Phase 2: 8 moderate, 5 high, 2 critical. After: 10 moderate, 5 high, 2 critical. The 2 new moderate findings are `node-pg-migrate` through `glob` ("AbortSignal cancellation bypass allows post-timeout filesystem traversal"). That code runs only in the migration CLI, at deploy time, on our own files. npm's suggested fix is a downgrade to node-pg-migrate 7.6.1, so I left it. The existing findings include runtime packages, not only dev tools:
+   - `sharp` (high, libvips, libheif and librsvg CVEs; fixed in 0.35.5, a major bump)
+   - `react-router` (moderate, an open redirect in `<Link>`; fixed in v7)
+   - `vitest` and `tinypool` (critical, but only while the Vitest UI server is listening or through worker options; non-breaking fix available)
+   None are fixed here. Open item.
 
 ### Open items
 
 - CI's migration step runs on GitHub once `dev` is pushed.
 - Not built yet: `anonymous_sessions`, `style_profiles`, `styling_requests`, `recommendations`, `selections`, `image_assets`, `analytics_events` (doc §9.2, still proposals).
-- `npm audit` findings in dev tools (finding 3).
+- `npm audit`: decide on the sharp, react-router and vitest upgrades (finding 3). My default: apply the non-breaking vitest/tinypool fix now, and schedule sharp 0.35 and react-router 7 as their own changes with the e2e suite.
