@@ -165,7 +165,7 @@ function route(req, res) {
   /* The build, the switches, and whether Postgres and Redis answer: 503 when a configured one is down (server/health.mjs). */
   if (pathname === "/api/health") {
     void dependencies()
-      .catch(() => ({ db: "down", redis: "down" }))
+      .catch(() => ({ db: "down", redis: "down", ai: "down" }))
       .then((deps) => {
         const status = statusFor(deps);
         send(req, res, status, { "Content-Type": TYPES[".json"], "Cache-Control": "no-store" }, JSON.stringify({ ...health(), ok: status === 200, dependencies: deps }));

@@ -7,3 +7,6 @@ dist/
 video/.frames/
 e2e/results/
 !.env.example
+.venv/
+__pycache__/
+.pytest_cache/

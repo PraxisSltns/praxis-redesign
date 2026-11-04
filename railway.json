@@ -3,7 +3,7 @@
   "build": {
     "builder": "DOCKERFILE",
     "dockerfilePath": "Dockerfile",
-    "watchPatterns": ["**", "!docs/**", "!README.md", "!.github/**", "!e2e/**", "!video/**", "!tools/**"]
+    "watchPatterns": ["**", "!docs/**", "!README.md", "!.github/**", "!e2e/**", "!video/**", "!tools/**", "!services/**"]
   },
   "deploy": {
     "startCommand": "npm run start",

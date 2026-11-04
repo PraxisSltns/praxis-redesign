@@ -49,6 +49,17 @@ jobs:
       - run: npm run db:migrate
       - run: npm test
       - run: npm run build
+      # The ai service (services/ai): its own pinned dependencies and tests.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/ai/requirements-dev.txt
+      - name: ai service tests
+        working-directory: services/ai
+        run: |
+          pip install -r requirements-dev.txt
+          python -m pytest -q
       # Every migration rolls back to an empty database and applies again.
       - name: Migrations down and up again
         run: |

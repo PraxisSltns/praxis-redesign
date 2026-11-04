@@ -1,5 +1,5 @@
-# The backend's dependencies on a developer's machine: Postgres 16 with pgvector, Redis 7 and an
-# S3-compatible bucket (SeaweedFS), each with a health check and a named volume. The gateway and the page run outside
+# The backend's dependencies on a developer's machine: Postgres 16 with pgvector, Redis 7, an
+# S3-compatible bucket (SeaweedFS) and the ai service, each with a health check and a named volume. The gateway and the page run outside
 # compose (npm run dev:api, npm run dev); see docs/development.md. Values come from .env, with the same
 # local defaults as .env.example. Nothing here is for staging or production.
 name: praxis
@@ -68,6 +68,22 @@ services:
       - -c
       - aws --endpoint-url http://s3:8333 s3api head-bucket --bucket "$$S3_BUCKET" 2>/dev/null || aws --endpoint-url http://s3:8333 s3 mb "s3://$$S3_BUCKET"
     restart: "no"
+
+  # The ai service (services/ai), built from its own Dockerfile. The gateway reaches it at AI_SERVICE_URL:
+  # http://ai:8000 from another container, http://localhost:8000 from npm run dev:api on the machine.
+  ai:
+    build: ./services/ai
+    environment:
+      # Railway binds :: (IPv6, its private network); here IPv4, for the port mapping and the health check.
+      HOST: 0.0.0.0
+      PORT: "8000"
+    ports:
+      - "${AI_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
 
 volumes:
   postgres-data:

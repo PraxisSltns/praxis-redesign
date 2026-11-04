@@ -31,7 +31,7 @@ Then either open http://localhost:3000 (page and gateway on one origin, like Rai
 
 | Script | What it does |
 |---|---|
-| `npm run dev:up` | Starts the containers and waits until each health check passes. The `s3-bucket` job creates the bucket and exits. |
+| `npm run dev:up` | Builds the ai service if its code changed, starts the containers and waits until each health check passes. The `s3-bucket` job creates the bucket and exits. |
 | `npm run dev:down` | Stops the containers and keeps the data. |
 | `npm run dev:reset` | Stops the containers, **deletes their volumes** (database, Redis, bucket) and starts them again empty. |
 | `npm run db:migrate` | Applies the database migrations (`server/db/migrations`, node-pg-migrate, SQL files). |
@@ -49,6 +49,7 @@ Then either open http://localhost:3000 (page and gateway on one origin, like Rai
 | `redis` | `redis:7.4-alpine` (append-only file on) | 6379 | `redis-cli ping` |
 | `s3` | `chrislusf/seaweedfs:4.50` (S3 API) | 8333 | `GET /healthz` |
 | `s3-bucket` | `amazon/aws-cli:2.39.3` | none | runs once, creates `S3_BUCKET` |
+| `ai` | built from `services/ai` (`python:3.12.16-slim`) | 8000 | `GET /health` |
 
 Postgres is published on **5433**, not 5432, so it doesn't clash with a Postgres already installed on the machine (a Homebrew `postgresql@14` on 5432 was answering in its place). Ports can be moved with `POSTGRES_PORT`, `REDIS_PORT` and `S3_PORT` in `.env` if something else on your machine uses them. Update the matching `DATABASE_URL`, `REDIS_URL` and `S3_ENDPOINT` too.
 

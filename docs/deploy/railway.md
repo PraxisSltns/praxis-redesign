@@ -54,7 +54,12 @@ The project already has a service whose public address is `praxis-redesign-produ
    ```
 
    Use the service names as they appear in your project (`Postgres`, `Redis`, `Bucket` are the defaults). Don't set `GEMINI_API_KEY`, any `AI_PROVIDER_*` or `RETAIL_SHOPIFY_STORE` on staging without the owner's approval. A Gemini key on its own switches on the budgeted outfit pictures (`server/ai.mjs`, `APPROVED_DEFAULTS`).
-8. **The ai service** (once `services/ai` exists, Week 1 phase 3). New > GitHub repo, same repository, root directory `services/ai`, branch `main`, Wait for CI on. **Don't generate a public domain.** The gateway reaches it over private networking at `http://ai.railway.internal:<port>` (`AI_SERVICE_URL`), so name the service `ai`.
+8. **The ai service** (`services/ai`). New > GitHub repo, same repository, then:
+   - Settings > Source: root directory `services/ai`, branch `main`, Wait for CI on. It builds from `services/ai/Dockerfile` with `services/ai/railway.json` (health check `/health`).
+   - **Don't generate a public domain.**
+   - Name the service `ai`.
+   - Variables: `PORT=8000`. Leave `HOST` unset: it defaults to `::`, the private network's IPv6.
+   - On the gateway, add `AI_SERVICE_URL=http://ai.railway.internal:8000`. `/api/health` then reports `"ai": "up"`. If it's down, health reports `"down"` but the gateway stays healthy.
 
 ## Checking a deploy
 
