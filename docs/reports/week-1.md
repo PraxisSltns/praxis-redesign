@@ -202,3 +202,47 @@ Run on 2026-11-04 on local branch `dev` (not pushed). No retailer feed arrived, 
 - The real first retailer (a store address or CSV) to replace the fixtures.
 - `httpx2`: check that it's the official successor before switching (finding 6).
 - The ai service on Railway (`docs/deploy/railway.md` step 8) once staging exists.
+
+## Phase 4: cut-outs, vectors, search
+
+Run on 2026-11-04 on local branch `dev` (not pushed), on the Week 1 laptop: Apple M1, 8 GB of RAM, 6.7 GB of swap in use, load average 5 to 35 from other apps during the run. Every timing below is from that machine and is a worst case, not a figure for Railway.
+
+### What was done
+
+| Commit | What it adds |
+|---|---|
+| `e4f7e58` | Shared ontology: "Black leather oxfords" (and suede, patent or calf oxfords and derbies) are shoes. Before, they matched the oxford-shirt rule, and the search test found it (finding 1) |
+| `db85e95` | `tools/fixture-images.mjs`: real garment photos for the fixtures, cut from the library photographs. That gives `server/retailers/fixtures/library.csv` (46 pieces, one per region of each photograph) and stand-in photos for the e2e store and `sample.csv` (29), 1.8 MB in all. `npm run db:seed` imports the library catalogue as a third retailer |
+| `cad78d2` | The batch job and search:<br>• `server/storage.mjs`: an S3 client for one private bucket (AWS SDK v3)<br>• `server/ai-service.mjs`: the client for `/cutout` and `/embed`<br>• `server/catalogue/process.mjs` + `cli.mjs`: `npm run catalogue:process`, the Redis queue with recovery, retries and an idempotent key per photo<br>• `server/search.mjs`: `POST /api/search` and `GET /api/cutouts/...`<br>Also 10 job and search tests on real Postgres and Redis, the 10-query search test (`SEARCH_QUALITY=1`), and Redis in CI |
+| `224976b` | `services/ai`:<br>• `POST /cutout` (BiRefNet) and `POST /embed` (Marqo-FashionSigLIP via open_clip `local-dir:`), with both models loaded once at start-up and inference one call at a time<br>• `app/download.py` fetches the weights at pinned revisions, and the Dockerfile bakes them in (CPU-only torch). `CUTOUT_MODEL=full\|lite`<br>• requirements split into web, runtime and dev, every package pinned; 9 pytest tests with a stand-in for the models<br>• the licence inventory in `docs/integration-dependencies.md` |
+
+### Checks
+
+| Check | Result | Evidence |
+|---|---|---|
+| Every imported item has exactly one cut-out and one 768-number vector | pass, except 2 items whose photo the e2e fixture breaks on purpose | `npm run catalogue:process` over the three fixture retailers: `done 73, retried 0, failed 2`, `coverage: 73 of 75 have a cut-out, 73 of 75 a vector (0 of the wrong size)`. Per retailer: Harbour & Hide 19 of 19, Praxis Library 46 of 46, Test Tailors 8 of 10. There are 73 distinct cut-out keys for 73 products. The 2 failures are `the photo was not found (/missing.jpg)`, the e2e store's deliberately broken photo, after 1 try, because a missing photo isn't retried. The 75 eligible are live, slotted products with a photo. Gift cards and the unmapped Weekender aren't eligible |
+| The job is idempotent and resumable | pass | a second run: `queued 2 new` (only the two that failed), `done 0`, and no cut-out made again. Tests: a job a stopped worker had taken is recovered (`recovered: 1`); a passing ai failure is retried once and then done; nothing is queued twice; the bucket key is `cutouts/<product>/<sha256 of the photo URL>.png` |
+| 10 sample queries return relevant in-stock items in under 1 s | **speed: pass, 10 of 10. Relevance: 8 of 10 pass the test as written. 9 of 10 put a piece of the right kind first** | `SEARCH_QUALITY=1 npx vitest run src/core/__tests__/search-quality.test.ts` against the library catalogue. Every query takes 49 to 76 ms in all (embed 44 to 71 ms, pgvector 4 to 7 ms). The test asks for the right kind first and the right slot in all of the top three. Failures: `"navy blazer"` gives Navy blazer, Navy suit jacket, then Navy tailored trousers (the 3rd is a bottom); `"brown leather belt"` gives three loafers (the catalogue's one belt is a small crop). The criteria were set before the first run and weren't changed. The first run had 2 more failures, both from the oxford bug fixed in `e4f7e58` |
+| Search over HTTP, through the gateway | pass | `npm run dev:api`, `/api/health` `{"db":"up","redis":"up","ai":"up"}`. Text: `{"text":"white leather sneakers","size":"10"}` returns `HTTP 200 in 0.158 s`, three sneakers in size 10 with cut-out URLs. Photo: a shoe photo as base64 returns `HTTP 200 in 0.229 s` (embed 216 ms). `GET` on a cut-out URL returns `200 image/png`, RGBA, alpha 0 to 254. Bad body `400`, GET on search `405`, unknown or traversal cut-out path `404` |
+| Models load once and are never fetched at run time | pass | the image with `--network none`: `/health` lists `BiRefNet e2bf8e4` and `Marqo-FashionSigLIP c56244c`, `load ms 17119` |
+| Cut-out timing on CPU (more than 5 s means batch-only) | **more than 5 s: cut-outs are batch-only** | The full BiRefNet at 1024 px, alone: 37 s, 73 s (and 43 s at 768, 31 s at 512). BiRefNet_lite at 1024: 16 s, 22 s, 18 s. In the batch run (lite, 73 photos): median 22.9 s, 90th percentile 60.8 s, slowest 89.8 s. Image vectors in the batch: median 4.5 s, slowest 21.7 s, under contention. A single warm image query took 216 ms. Text vectors: 42 to 71 ms |
+| ai service tests | pass | `9 passed` (`requirements-dev.txt` only, in a clean venv, with no warning) |
+| Unit tests, typecheck, the live feed | pass | `Test Files 24 passed, 1 skipped`, `Tests 331 passed, 12 skipped` (the search-quality test) with `DATABASE_URL` and `REDIS_URL`; `tsc` 0 errors; `SUITE=14 npm run e2e` after the ontology fix: `11 of 11 runs passed; 110 of 110 checks passed` |
+
+### Found on the way
+
+1. **The ontology filed "Black leather oxfords" as a shirt.** The dress-shoe rule needed the word "shoes", so "oxfords" fell through to the oxford-shirt rule. A store's "Leather Oxfords" would have been misfiled by the live feed and the import alike. Fixed in `e4f7e58`; "Oxford Shirt in White" and "Washed Oxford" are still shirts.
+2. **The full ai image doesn't fit a 3.8 GB Docker VM.** It loads (2.4 GB) and is then killed for memory on the first cut-out (`OOMKilled true`, exit 137). Railway needs at least 8 GB for the ai service (`docs/deploy/railway.md`). Locally, on small machines, run the service from a venv with `CUTOUT_MODEL=lite` (`docs/development.md`). That's how this phase's batch ran.
+3. **The batch ran with BiRefNet_lite, not the full model,** because the full model takes 40 to 70 s a photo here. Lite is the same code with the small backbone (compared line by line, MIT). The image's default stays `full`. Cut-out quality between the two hasn't been compared yet.
+4. **BiRefNet runs with `trust_remote_code`.** Its code at the pinned revision was read first (no network, subprocess or file access; weights only from safetensors). Changing the revision means reading it again.
+5. **The Redis client wasn't connected when the job started** (`The client is offline`), because commands fail at once while the client is down (no offline queue). Jobs now wait with `redisReady()`. `/api/health` keeps failing fast, which is the intent.
+6. **Tests that searched the whole catalogue broke once local data had vectors.** The catalogue tests now search only their own retailer. Search takes a `retailerId` scope for tests and operators, which isn't part of the HTTP body.
+7. **`httpx2` is resolved.** It came in as a dependency of `huggingface_hub`, is published by the author of `httpx` under the pydantic organisation, and is what Starlette's test client asks for. The tests use it now, and the warning is gone.
+8. **The explanations unit test timed out once under load** (8.4 s against vitest's 5 s, while the models were running). It passes alone and in the later full run. It's the same kind of timing flake as TRY5.
+
+### Open items
+
+- Search relevance: the two failing queries (finding: the third "navy blazer" result, and the belt). Options: rank within the query's slot when the query names a kind, or compare `full` against `lite` cut-outs on the same photos.
+- Benchmark cut-outs on Railway's CPU once staging exists, and decide whether a GPU is needed for production volumes.
+- Image queries took 4.5 s median inside the batch, under contention, and 216 ms alone. Measure on Railway.
+- Run the batch on a schedule on staging (a Railway cron service running `npm run catalogue:process`).
