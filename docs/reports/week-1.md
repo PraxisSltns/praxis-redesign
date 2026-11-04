@@ -118,3 +118,41 @@ Run on 2026-11-03 and 2026-11-04, on local branch `dev` (not pushed). Phase 0's 
 - The three CI flow checks (waiting on the push and the settings).
 - What the existing `praxis-redesign-production` service becomes (finding 4).
 - The `ai` service on Railway once `services/ai` exists (Phase 3).
+
+## Phase 2: data model, migrations, health
+
+Run on 2026-11-04 on local branch `dev` (not pushed).
+
+### What was done
+
+| Commit | What it adds |
+|---|---|
+| `4557403` | Five SQL migrations in `server/db/migrations` (node-pg-migrate 8.0.4): the `vector` extension; `users`, `consents`; `wardrobe_items`; `retailers`, `products` (with `slot`, `layer`, `cutout_url`, `embedding vector(768)` and an HNSW index on `vector_cosine_ops`), `product_variants` (size, price, `available`, `stock_quantity`); `saved_looks`, `feedback`. npm scripts `db:migrate`, `db:migrate:down`, `db:migrate:create`. CI's `test` job now runs a `pgvector/pgvector:0.8.0-pg16` service and migrates up, down to zero tables, and up. Local Postgres moves to port 5433. `docs/data-schemas.md` §9 now marks which tables are built and how they differ from the proposal, with a new §9.5 for the catalogue |
+| `a9107d7` | `server/db.mjs` (pg 8.23 pool: 10 connections, 5 s connect, 10 s statement, 15 s query, 30 s idle, each overridable), `server/redis.mjs` (node-redis 5.12: no offline queue, so commands fail at once while down; growing reconnect delay; errors logged at most every 30 s), `server/health.mjs`; `/api/health` gains `dependencies: {db, redis}` (each `up`, `down` or `off`), answers 503 with `ok: false` when a configured one is down, and keeps every earlier field. The server closes the pool and Redis on SIGTERM. 12 unit tests |
+
+Table names follow `docs/data-schemas.md`: `wardrobe_items` (the brief's "wardrobe"), `saved_looks` (the brief's "looks"), and `product_variants` for variants, since the doc has no name for it.
+
+### Checks
+
+| Check | Result | Evidence |
+|---|---|---|
+| Up, down, up on an empty database | pass | after `npm run dev:reset`, `npm run db:migrate` creates 8 tables plus `pgmigrations` and `products_embedding_hnsw`. `npm run db:migrate:down -- 1000` runs all five DOWN migrations: 0 tables left, the `vector` extension removed. `npm run db:migrate` applies all 5 again, and a further run says `No migrations to run!` |
+| The same in CI's steps | pass locally | the `Migrations up, down, up` step's commands, run against the local database: `after down: 0 tables`, then 5 UP migrations. CI itself runs once `dev` is pushed |
+| Constraints | pass | slot `jacket` is refused (`products_slot_check`); a 3-number vector is refused (`expected 768 dimensions, not 3`); a second (retailer, external id) is refused (`products_retailer_id_external_id_key`); deleting a retailer removes its products |
+| Stopping Redis gives 503 with `redis: down` | pass | `npm run dev:api` with compose up: `200 {"ok":true,"dependencies":{"db":"up","redis":"up"}}`; `docker compose stop redis` then `503 {"ok":false,"dependencies":{"db":"up","redis":"down"}}`; `docker compose start redis` then `200` again. Stopping Postgres the same way: `503 ... "db":"down"`, then `200` |
+| A server with no database still passes | pass | `node server/index.mjs` with no `DATABASE_URL` or `REDIS_URL` (the existing Railway service): `200 {"ok":true,"dependencies":{"db":"off","redis":"off"}}` |
+| Health unit tests | pass | `src/core/__tests__/health.test.ts`: 12 tests (off, up, down, throws, timeout; 200 and 503 cases; settings) |
+| Smoke test still passes | pass | `node tools/smoke.mjs http://localhost:3000` against `npm run dev:api`: `38 of 38 smoke checks passed` |
+| Unit tests and build | pass | `Test Files 22 passed (22)`, `Tests 299 passed (299)`; `built in 4.42s` |
+
+### Found on the way
+
+1. **A Postgres already installed on this machine was answering on 5432.** A Homebrew `postgresql@14` listens on `127.0.0.1:5432` and won over Docker's port, so the first migration got `role "praxis" does not exist`. Local Postgres is now published on 5433 (`docker-compose.yml`, `.env.example`, `docs/development.md`). CI and Railway are unaffected.
+2. **On Railway, a 503 now fails the deploy's health check.** In staging, a deploy whose Postgres or Redis is unreachable won't go live, which is the intent. The existing service has neither configured, so it reports `off` and stays at 200.
+3. **`npm audit` lists findings in existing dev tools** (vitest's mocker, `serve`'s compression, esbuild under Vite). They are the same before and after adding pg, redis and node-pg-migrate. None are fixed here, because the fixes are breaking major upgrades. Open item.
+
+### Open items
+
+- CI's migration step runs on GitHub once `dev` is pushed.
+- Not built yet: `anonymous_sessions`, `style_profiles`, `styling_requests`, `recommendations`, `selections`, `image_assets`, `analytics_events` (doc §9.2, still proposals).
+- `npm audit` findings in dev tools (finding 3).
