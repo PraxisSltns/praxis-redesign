@@ -1,0 +1,32 @@
+product_id,title,brand,description,image_urls,product_type,tags,variant_id,size,colour,sku,price,currency,available,stock_quantity,product_url
+OX-WHT,Oxford Shirt in White,Harbour & Hide,"A button-down oxford, washed soft.",https://cdn.praxis-test.example/ox-wht-1.jpg|https://cdn.praxis-test.example/ox-wht-2.jpg,Shirts,cotton|core,OX-WHT-S,S,White,HH-OX-WHT-S,89.00,USD,yes,4,https://shop.praxis-test.example/products/oxford-shirt-white
+OX-WHT,Oxford Shirt in White,Harbour & Hide,,,,,OX-WHT-M,M,White,HH-OX-WHT-M,89.00,USD,yes,7,https://shop.praxis-test.example/products/oxford-shirt-white
+OX-WHT,Oxford Shirt in White,Harbour & Hide,,,,,OX-WHT-L,L,White,HH-OX-WHT-L,89.00,USD,no,0,https://shop.praxis-test.example/products/oxford-shirt-white
+LIN-SKY,Linen Shirt in Sky Blue,Harbour & Hide,"Pure linen, a relaxed collar.",https://cdn.praxis-test.example/lin-sky.jpg,Shirts,linen|summer,LIN-SKY-M,M,Sky Blue,,98.00,USD,yes,,https://shop.praxis-test.example/products/linen-shirt-sky
+LIN-SKY,Linen Shirt in Sky Blue,Harbour & Hide,,,,,LIN-SKY-L,L,Sky Blue,,98.00,USD,yes,,https://shop.praxis-test.example/products/linen-shirt-sky
+MER-CHA,Merino Crew in Charcoal,Harbour & Hide,Extra-fine merino.,https://cdn.praxis-test.example/mer-cha.jpg,Knitwear,merino,MER-CHA-M,M,Charcoal,,120.00,USD,,3,https://shop.praxis-test.example/products/merino-crew-charcoal
+MER-CHA,Merino Crew in Charcoal,Harbour & Hide,,,,,MER-CHA-L,L,Charcoal,,120.00,USD,,0,https://shop.praxis-test.example/products/merino-crew-charcoal
+CSH-CAM,Cashmere Roll Neck in Camel,Harbour & Hide,,https://cdn.praxis-test.example/csh-cam.jpg,Knitwear,cashmere,CSH-CAM-M,M,Camel,,245.00,USD,yes,2,https://shop.praxis-test.example/products/cashmere-roll-neck-camel
+BLZ-NVY,Navy Wool Blazer,Harbour & Hide,"Half-lined, soft shoulder.",https://cdn.praxis-test.example/blz-nvy.jpg,Tailoring,wool,BLZ-NVY-38,38,Navy,,395.00,USD,yes,1,https://shop.praxis-test.example/products/navy-wool-blazer
+BLZ-NVY,Navy Wool Blazer,Harbour & Hide,,,,,BLZ-NVY-40,40,Navy,,395.00,USD,yes,2,https://shop.praxis-test.example/products/navy-wool-blazer
+BLZ-NVY,Navy Wool Blazer,Harbour & Hide,,,,,BLZ-NVY-42,42,Navy,,395.00,USD,yes,1,https://shop.praxis-test.example/products/navy-wool-blazer
+BLZ-STN,Unstructured Cotton Blazer in Stone,Harbour & Hide,,https://cdn.praxis-test.example/blz-stn.jpg,Tailoring,cotton|summer,BLZ-STN-40,40,Stone,,285.00,USD,yes,3,https://shop.praxis-test.example/products/cotton-blazer-stone
+BMB-TAN,Suede Bomber Jacket in Tan,Harbour & Hide,,https://cdn.praxis-test.example/bmb-tan.jpg,Outerwear,suede,BMB-TAN-M,M,Tan,,450.00,USD,yes,1,https://shop.praxis-test.example/products/suede-bomber-tan
+OVC-CAM,Camel Overcoat,Harbour & Hide,Wool and cashmere.,https://cdn.praxis-test.example/ovc-cam.jpg,Outerwear,wool,OVC-CAM-40,40,Camel,,595.00,USD,yes,2,https://shop.praxis-test.example/products/camel-overcoat
+TRS-GRY,Pleated Wool Trousers in Grey,Harbour & Hide,,https://cdn.praxis-test.example/trs-gry.jpg,Trousers,wool,TRS-GRY-32,32,Grey,,185.00,USD,yes,5,https://shop.praxis-test.example/products/pleated-wool-trousers-grey
+TRS-GRY,Pleated Wool Trousers in Grey,Harbour & Hide,,,,,TRS-GRY-34,34,Grey,,185.00,USD,yes,4,https://shop.praxis-test.example/products/pleated-wool-trousers-grey
+CHN-NVY,Slim Chinos in Navy,Harbour & Hide,,https://cdn.praxis-test.example/chn-nvy.jpg,Trousers,cotton,CHN-NVY-32,32,Navy,,110.00,USD,yes,6,https://shop.praxis-test.example/products/slim-chinos-navy
+JNS-IND,Selvedge Jeans in Indigo,Harbour & Hide,,https://cdn.praxis-test.example/jns-ind.jpg,Denim,denim,JNS-IND-32,32,Indigo,,165.00,USD,yes,3,https://shop.praxis-test.example/products/selvedge-jeans-indigo
+LTR-ECR,Drawstring Linen Trousers in Ecru,Harbour & Hide,,https://cdn.praxis-test.example/ltr-ecr.jpg,Trousers,linen,LTR-ECR-M,M,Ecru,,125.00,USD,yes,2,https://shop.praxis-test.example/products/linen-trousers-ecru
+LOF-BRN,Brown Suede Loafers,Harbour & Hide,,https://cdn.praxis-test.example/lof-brn.jpg,Shoes,suede,LOF-BRN-9,9,Brown,,265.00,USD,yes,2,https://shop.praxis-test.example/products/brown-suede-loafers
+LOF-BRN,Brown Suede Loafers,Harbour & Hide,,,,,LOF-BRN-10,10,Brown,,265.00,USD,yes,1,https://shop.praxis-test.example/products/brown-suede-loafers
+CHB-BLK,Black Leather Chelsea Boots,Harbour & Hide,,https://cdn.praxis-test.example/chb-blk.jpg,Shoes,leather,CHB-BLK-10,10,Black,,320.00,USD,yes,2,https://shop.praxis-test.example/products/black-chelsea-boots
+SNK-WHT,White Leather Sneakers,Harbour & Hide,,https://cdn.praxis-test.example/snk-wht.jpg,Shoes,leather,SNK-WHT-10,10,White,,180.00,USD,yes,8,https://shop.praxis-test.example/products/white-leather-sneakers
+BLT-TAN,Tan Leather Belt,Harbour & Hide,,https://cdn.praxis-test.example/blt-tan.jpg,Accessories,leather,BLT-TAN-34,34,Tan,,75.00,USD,yes,5,https://shop.praxis-test.example/products/tan-leather-belt
+TIE-NVY,Silk Knit Tie in Navy,Harbour & Hide,,https://cdn.praxis-test.example/tie-nvy.jpg,Accessories,silk,TIE-NVY-OS,,Navy,,65.00,USD,yes,9,https://shop.praxis-test.example/products/silk-knit-tie-navy
+SCK-3PK,Ribbed Socks Three Pack,Harbour & Hide,,https://cdn.praxis-test.example/sck.jpg,Accessories,cotton,SCK-3PK-OS,,Mixed,,30.00,USD,yes,20,https://shop.praxis-test.example/products/ribbed-socks-three-pack
+WKD-OLV,The Weekender,Harbour & Hide,Waxed canvas with leather handles.,https://cdn.praxis-test.example/wkd-olv.jpg,,travel,WKD-OLV-OS,,Olive,,210.00,USD,yes,4,https://shop.praxis-test.example/products/the-weekender
+POL-GRN,Pique Polo in Bottle Green,Harbour & Hide,,https://cdn.praxis-test.example/pol-grn.jpg,Polos,cotton,POL-GRN-M,M,Green,,75.00,USD,no,0,https://shop.praxis-test.example/products/pique-polo-green
+POL-GRN,Pique Polo in Bottle Green,Harbour & Hide,,,,,POL-GRN-L,L,Green,,75.00,USD,no,0,https://shop.praxis-test.example/products/pique-polo-green
+GFT-100,Gift Card,Harbour & Hide,,,Gift Card,,GFT-100,,,,100.00,USD,yes,,https://shop.praxis-test.example/products/gift-card
+BAD-001,Cord Trousers in Rust,Harbour & Hide,,https://cdn.praxis-test.example/cord.jpg,Trousers,,BAD-001-32,32,Rust,,about 140,USD,yes,2,https://shop.praxis-test.example/products/cord-trousers-rust

@@ -20,6 +20,7 @@
  * Nothing about the customer is sent to the store: the list is read whole and matched here.
  */
 import { classify, colourOf, fitOf, materialOf, STANDS_IN_FOR } from "../../src/shared/ontology.mjs";
+import { readShopifyName, readShopifyProducts } from "../retailers/shopify.mjs";
 
 export const id = "shopify-feed";
 export const billable = false;
@@ -27,8 +28,6 @@ export const SERVICES = ["product_matching"];
 
 const STORE = () => (process.env.RETAIL_SHOPIFY_STORE ?? "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
 export const version = STORE() || "off";
-/** Stores are read over https; a store on this machine (a stand-in for tests) over plain http. */
-const base = (store) => `${/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(store) ? "http" : "https"}://${store}`;
 /** Whether only test browsers use it (see liveServices in server/ai.mjs). */
 export const testOnly = () => (process.env.RETAIL_SHOPIFY_FOR ?? "test").trim() !== "everyone";
 
@@ -149,26 +148,9 @@ export function resetCatalogue() {
 
 async function readCatalogue(store, fetcher, signal) {
   if (catalogue && catalogue.store === store && Date.now() - catalogue.at < KEEP_MS) return catalogue;
-  const products = [];
-  for (let page = 1; page <= PAGES; page += 1) {
-    const res = await fetcher(`${base(store)}/products.json?limit=250&page=${page}`, { signal, headers: { Accept: "application/json", "User-Agent": "Praxis/1.0 (styling test)" } });
-    if (!res.ok) {
-      if (page === 1) throw Object.assign(new Error(`The store answered ${res.status}.`), { status: res.status });
-      break;
-    }
-    const batch = (await res.json())?.products;
-    if (!Array.isArray(batch) || !batch.length) break;
-    products.push(...batch);
-    if (batch.length < 250) break;
-  }
-  let name = (process.env.RETAIL_SHOPIFY_NAME ?? "").trim();
-  if (!name) {
-    try {
-      name = String((await (await fetcher(`${base(store)}/meta.json`, { signal })).json())?.name ?? "").trim();
-    } catch {
-      /* the address stands in */
-    }
-  }
+  // The list is read the same way as the catalogue import's (server/retailers/shopify.mjs).
+  const products = await readShopifyProducts(store, { fetcher, signal, pages: PAGES });
+  const name = (process.env.RETAIL_SHOPIFY_NAME ?? "").trim() || (await readShopifyName(store, { fetcher, signal })) || "";
   const usable = products.map((p) => ({ p, attrs: attributesOf(p) })).filter((x) => x.attrs && x.p.handle);
   catalogue = { store, name: name || store.replace(/^www\./, ""), at: Date.now(), checkedAt: new Date().toISOString(), items: usable };
   return catalogue;

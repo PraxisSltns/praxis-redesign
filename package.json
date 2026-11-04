@@ -17,9 +17,10 @@
     "dev:down": "docker compose down",
     "dev:reset": "docker compose down -v && docker compose up -d --wait",
     "db:migrate": "node --env-file-if-exists=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations --migration-file-language sql --check-order up",
-    "db:seed": "node -e \"console.log('No seed data yet: the first retailer import fills the catalogue (Week 1, phase 3).')\"",
+    "db:seed": "node --env-file-if-exists=.env server/retailers/cli.mjs --fixtures",
     "db:migrate:down": "node --env-file-if-exists=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations --migration-file-language sql --check-order down",
-    "db:migrate:create": "node node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations --migration-file-language sql create"
+    "db:migrate:create": "node node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations --migration-file-language sql create",
+    "retailers:import": "node --env-file-if-exists=.env server/retailers/cli.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.1.0",

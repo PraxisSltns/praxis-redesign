@@ -45,12 +45,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The database tests (imports into Postgres) need the tables first.
+      - run: npm run db:migrate
       - run: npm test
       - run: npm run build
-      # Every migration applies, rolls back to an empty database, and applies again.
-      - name: Migrations up, down, up
+      # Every migration rolls back to an empty database and applies again.
+      - name: Migrations down and up again
         run: |
-          npm run db:migrate
           npm run db:migrate:down -- 1000
           tables=$(psql "$DATABASE_URL" -tAc "select count(*) from pg_tables where schemaname = 'public' and tablename <> 'pgmigrations'")
           if [ "$tables" != "0" ]; then echo "::error::$tables tables left after migrating down"; exit 1; fi

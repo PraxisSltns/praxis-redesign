@@ -265,3 +265,62 @@ generate images.
   cut at the head or the shoes.
 - `.github/workflows/visual-demo.yml` (`tools/visual-demo.mjs`): makes outfits A, B and C on the live
   site and keeps their source pictures, made pictures and checks as an artifact. Run by hand only.
+
+## Importing a retailer's catalogue into the database
+
+Since Week 1 (2026-11) a retailer's catalogue can be imported into Postgres (`retailers`, `products`, `product_variants`; `docs/data-schemas.md` §9.5). Nothing on the page reads these tables yet. The store feed above still answers `?stock=live` tabs on its own.
+
+```
+connector (server/retailers/shopify.mjs or csv.mjs)  ->  normalised items (server/retailers/connector.mjs)
+  ->  import (server/retailers/import.mjs): one transaction, upsert, slots from the ontology, a report
+```
+
+```bash
+npm run retailers:import -- --shopify www.example.com [--name "Example"] [--currency USD]
+npm run retailers:import -- --csv path/to/catalogue.csv [--name "Example"]
+npm run db:seed          # the e2e test store and server/retailers/fixtures/sample.csv, no network
+# add --report out.json to keep the full report
+```
+
+**Connectors.** Every connector returns the same normalised item, checked by `problemsWith`:
+- external id, title, brand, plain-text description, https images, lowest price, currency and product URL
+- the retailer's own type and tags
+- at least one variant, each with external id, size, colour, SKU, price, currency, `available` and `stockQuantity`. `stockQuantity` is null when the retailer only says in or out.
+
+An item that breaks the contract is rejected and listed in the report, never stored. Both connectors pass the same contract test (`src/core/__tests__/retailers.test.ts`).
+
+- **Shopify** (`createShopifyConnector`): the public `/products.json`, read page by page with the same reader the live feed uses (`readShopifyProducts`). It gives no currency (USD unless `--currency` says otherwise) and no stock counts. It's for testing and for stores that agreed (see above).
+- **CSV** (`createCsvConnector`): see "CSV catalogue files" below.
+
+**The import** runs in one transaction. If anything fails, that retailer's rows are left as they were.
+- **Upserts.** Products upsert on (retailer, external id) and variants on (product, external id). Ids are derived from those keys, so a second identical import reports `0 new, 0 changed`.
+- **Pieces that leave the feed** are kept. They get `removed_at` and all their sizes become unavailable. A piece that returns is restored.
+- **Sizes that leave a piece** become unavailable.
+- **Changed photos** clear the piece's cut-out and vector, so they are made again.
+- **Slots** come from the shared ontology (`src/shared/ontology.mjs`), from the name and type, then the tags, exactly as the live feed reads them. A piece the ontology doesn't place keeps no slot, is never styled, and is listed as **unmapped**. Nothing is guessed. Things that aren't clothes (gift cards, shipping protection, swatches, repairs: `NOT_A_GARMENT`) are listed as **not a garment** and not counted.
+- **The report** gives counts (new, changed, restored, removed, sizes made unavailable), pieces per slot, the share of in-stock garments that got a slot, and the unmapped, not-a-garment and rejected lists.
+
+## CSV catalogue files
+
+One row per variant (one size of one piece), with a header row. Rows that share a `product_id` make one piece, and its product columns are read from its first row. UTF-8, comma-separated, RFC 4180 quoting (a field with a comma, a quote or a line break is wrapped in `"`, and a `"` inside it is written `""`).
+
+| Column | Required | Meaning |
+|---|---|---|
+| `product_id` | yes | the retailer's id for the piece, stable between files |
+| `title` | yes | the piece's name, as shown to customers |
+| `product_url` | yes | `https://` address of the piece on the retailer's site |
+| `price` | yes | a number, at least 0, in `currency` (for example `89.00`) |
+| `currency` | yes | ISO 4217 code (`USD`, `EUR`, `GBP`); upper or lower case |
+| `variant_id` | no | the retailer's id for this size; default `<product_id>:<size>` (or `:one-size`) |
+| `size` | no | as the retailer writes it (`M`, `32`, `10`); empty for one size |
+| `colour` | no | this variant's colour |
+| `sku` | no | |
+| `available` | no | `yes`/`no` (also `true`/`false`, `1`/`0`, `in stock`/`out of stock`); default: in stock when `stock_quantity` is above 0, or when neither is given |
+| `stock_quantity` | no | a whole number of at least 0; empty when unknown |
+| `brand` | no | |
+| `description` | no | plain text or simple HTML (tags are removed) |
+| `image_urls` | no | `https://` addresses separated by `\|` or spaces; the first is the main photo |
+| `product_type` | no | the retailer's category (`Shirts`, `Footwear`); used to place the piece when its name doesn't |
+| `tags` | no | separated by `\|`; used last to place the piece |
+
+Columns can come in any order. Unknown columns are ignored. A file without one of the required columns is refused whole. A row that breaks a rule (an empty required value, a price that isn't a number, an `http://` link, an `available` value that isn't yes or no, a size listed twice) is left out and named in the report with its line number. Example: `server/retailers/fixtures/sample.csv`.
