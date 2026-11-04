@@ -58,8 +58,9 @@ The project already has a service whose public address is `praxis-redesign-produ
    - Settings > Source: root directory `services/ai`, branch `main`, Wait for CI on. It builds from `services/ai/Dockerfile` with `services/ai/railway.json` (health check `/health`).
    - **Don't generate a public domain.**
    - Name the service `ai`.
-   - Variables: `PORT=8000`. Leave `HOST` unset: it defaults to `::`, the private network's IPv6.
-   - On the gateway, add `AI_SERVICE_URL=http://ai.railway.internal:8000`. `/api/health` then reports `"ai": "up"`. If it's down, health reports `"down"` but the gateway stays healthy.
+   - Variables: `PORT=8000`. Leave `HOST` unset: it defaults to `::`, the private network's IPv6. `CUTOUT_MODEL` is a build-time choice (the image bakes the weights): leave it at `full`.
+   - Resources: the image is 3.8 GB (CPU-only PyTorch plus about 1.2 GB of weights). Give the service **at least 8 GB of memory**. With both models loaded it uses 2.4 GB, and a full-size cut-out needs more than another 1.4 GB: in a 3.8 GB Docker VM the container was killed for memory (`OOMKilled`) during its first cut-out (2026-11-04). Start-up takes about 17 s while the models load, inside the 120 s health check.
+   - On the gateway, add `AI_SERVICE_URL=http://ai.railway.internal:8000`. Search (`/api/search`) and the batch job (`npm run catalogue:process`, from a Railway one-off command or a cron service) need it. `/api/health` then reports `"ai": "up"`. If it's down, health reports `"down"` but the gateway stays healthy.
 
 ## Checking a deploy
 
