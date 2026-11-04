@@ -14,7 +14,8 @@ import { createServer } from "node:http";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
-import { handleTryOn } from "./tryon.mjs";
+import { handleTryOn, readBody } from "./tryon.mjs";
+import { handleCutout, handleSearch, isCutoutPath } from "./search.mjs";
 import { handleAi, liveServices } from "./ai.mjs";
 import { handleVisual } from "./visuals.mjs";
 import { handleClientError, health, logError, RELEASE } from "./monitor.mjs";
@@ -133,6 +134,16 @@ function route(req, res) {
     void handleAi(req, res, ai[1]);
     return;
   }
+  /* Search the imported catalogue by words or a photo (server/search.mjs). */
+  if (req.url?.split("?")[0] === "/api/search") {
+    if (req.method !== "POST") {
+      res.writeHead(405, { Allow: "POST" });
+      return res.end();
+    }
+    // Room for an 8 MB photo as base64, plus the rest of the body.
+    void handleSearch(req, res, (r) => readBody(r, 12 * 1024 * 1024));
+    return;
+  }
   /* Errors from the page, logged without personal details (server/monitor.mjs). */
   if (req.url?.split("?")[0] === "/api/client-error") {
     if (req.method !== "POST") {
@@ -159,6 +170,8 @@ function route(req, res) {
       .then((live) => send(req, res, 200, { "Content-Type": TYPES[".json"], "Cache-Control": "no-store" }, JSON.stringify({ live })));
     return;
   }
+  /* Catalogue cut-outs, streamed from the private bucket (server/search.mjs). */
+  if (isCutoutPath(pathname)) return void handleCutout(req, res, pathname);
   /* Outfit pictures made by the image provider (server/visuals.mjs). */
   const picture = /^\/api\/visuals\/(img_[0-9a-f]{24})\.jpg$/.exec(pathname);
   if (picture) return handleVisual(req, res, picture[1]);

@@ -39,6 +39,9 @@ Then either open http://localhost:3000 (page and gateway on one origin, like Rai
 | `npm run db:migrate:create -- <name>` | Makes a new SQL migration file with `-- Up Migration` and `-- Down Migration` sections. |
 | `npm run db:seed` | Loads local sample data. |
 | `npm run dev:api` | The gateway with `.env` loaded (`npm start` is what Railway runs, with no `.env`). |
+| `npm run retailers:import -- ...` | Imports a Shopify store or a CSV into the database (`docs/CATALOGUE.md`). `npm run db:seed` imports the three fixture catalogues. |
+| `npm run catalogue:process` | The batch job: cut-outs and vectors for every product missing them (needs the ai service with its models). |
+| `npm run ai:dev` | The ai service from its venv on :8000, outside Docker (see "The ai service's models" below). |
 | `npm test`, `npm run build`, `npm run e2e` | Unit tests, typecheck and build, the browser scenarios (see `docs/testing-report.md`). |
 
 ## The containers
@@ -64,6 +67,23 @@ curl -s localhost:3000/api/health   # "dependencies": {"db": "up", "redis": "up"
 docker compose exec redis redis-cli ping
 docker compose run --rm s3-bucket   # make the bucket again (safe if it exists)
 ```
+
+## The ai service's models
+
+The ai service's image bakes in both models, about 1.2 GB of weights, and needs several GB of memory to run them. On a small machine (8 GB, as on the Week 1 laptop) running them inside Docker Desktop's VM isn't practical. Run the service from a venv instead, with the smaller cut-out model:
+
+```bash
+cd services/ai
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+CUTOUT_MODEL=lite .venv/bin/python -m app.download    # once: the pinned weights into services/ai/.models
+cd ../..
+docker compose stop ai                                # free :8000
+CUTOUT_MODEL=lite npm run ai:dev                      # loads both models, about 10 s
+npm run db:seed && npm run catalogue:process          # import the fixtures, then cut-outs and vectors
+```
+
+`.models/` and `.venv/` are git-ignored. `CUTOUT_MODEL=full` (the default, and what the image builds) is BiRefNet with the large backbone.
 
 ## Keys and secrets
 

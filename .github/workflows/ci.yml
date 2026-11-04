@@ -36,8 +36,19 @@ jobs:
           --health-interval 2s
           --health-timeout 3s
           --health-retries 30
+      # The catalogue job's queue (src/core/__tests__/catalogue.test.ts uses database 15).
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
     env:
       DATABASE_URL: postgres://praxis:praxis@localhost:5432/praxis
+      REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -324,3 +324,35 @@ One row per variant (one size of one piece), with a header row. Rows that share 
 | `tags` | no | separated by `\|`; used last to place the piece |
 
 Columns can come in any order. Unknown columns are ignored. A file without one of the required columns is refused whole. A row that breaks a rule (an empty required value, a price that isn't a number, an `http://` link, an `available` value that isn't yes or no, a size listed twice) is left out and named in the report with its line number. Example: `server/retailers/fixtures/sample.csv`.
+
+## Cut-outs, vectors and search (Week 1, phase 4)
+
+Every live, slotted product with a photo gets one cut-out (the garment on a transparent background, a PNG in the bucket) and one 768-number vector (Marqo-FashionSigLIP, from the cut-out on white). Search ranks products by how close their vector is to the query's. Models and licences: `docs/integration-dependencies.md`, "Licence inventory".
+
+```
+npm run catalogue:process
+  -> queue in Redis: products missing a cut-out or a vector          server/catalogue/process.mjs
+  -> per product: fetch photo -> ai /cutout (BiRefNet) -> bucket cutouts/<product>/<photo hash>.png
+                  -> ai /embed (the cut-out) -> products.embedding, products.cutout_url
+POST /api/search {"text"} or {"image"}                               server/search.mjs
+  -> ai /embed (the query) -> pgvector cosine search on the HNSW index, live + slotted + in stock (+ size, slot)
+  -> items with GET /api/cutouts/<product>/<hash>.png (streamed from the private bucket)
+```
+
+**The batch job** runs by hand or on a schedule, never on a request.
+- **Resumable.** Redis keeps the queue (`catalogue:queue`) and what's being worked on (`catalogue:processing`). A worker that starts puts back anything a stopped one had taken.
+- **Idempotent.** A product with both is skipped, and nothing is queued twice. A cut-out already in the bucket is reused. The key comes from the product and its photo's address.
+- **Retries.** A passing failure (the ai service busy or slow) is retried up to 3 times. One that can't succeed (a photo that's missing, or isn't an image) fails at once. Failures are listed with their reason.
+- **The import resets it.** When a product's photos change, the import clears its cut-out and vector, and the next run makes them again.
+
+Cut-outs take tens of seconds per photo on CPU (`docs/reports/week-1.md`, phase 4), so they are batch-only. Embedding a search's few words takes tens of milliseconds, so search runs on the request.
+
+**Search request.**
+- A body needs either `text` (up to 300 characters) or `image` (base64 or a `data:` URL, up to 8 MB).
+- Optional: `size` (only pieces with that size in stock), `slot` (`top`, `bottom`, `shoes`, `extras`) and `limit` (1 to 50, default 12).
+
+**Search answer.** Each item has its product id, title, brand, retailer, slot, layer, subcategory, colour, price, currency, product URL, the retailer's photo, the `cutoutUrl` on this server, the in-stock sizes, and the `score` (cosine similarity). It also gives `ms` (embed, search, total).
+
+**What search never returns:** a removed piece, a piece with no slot, cut-out or vector, or one with no size in stock.
+
+**Fixtures.** `tools/fixture-images.mjs` cuts real garment photos out of the library photographs for the test catalogues, so this runs with no network. It writes `server/retailers/fixtures/library.csv`, with 46 pieces, one per region of each photograph, plus stand-in photos for the e2e test store and `sample.csv`. With `FIXTURE_IMAGES=cdn.praxis-test.example=server/retailers/fixtures/images`, the job reads those photos from disk. These crops are test fixtures only and are never shown to customers. The e2e store's `missing.jpg` stays missing on purpose.

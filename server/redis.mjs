@@ -16,6 +16,7 @@ export function redisSettings(env = process.env) {
 }
 
 let client = null;
+let connecting = null;
 
 /** The shared client, or null when REDIS_URL isn't set. */
 export function redis() {
@@ -34,14 +35,22 @@ export function redis() {
     last = Date.now();
     console.error(JSON.stringify({ type: "redis_error", at: new Date().toISOString(), code: err?.code ?? err?.name ?? "unknown" }));
   });
-  client.connect().catch(() => undefined);
+  connecting = client.connect().catch(() => undefined);
   return client;
+}
+
+/** The shared client once its first connection attempt has finished (null when REDIS_URL isn't set). For jobs, which need it up before they start. */
+export async function redisReady() {
+  const c = redis();
+  if (c) await connecting;
+  return c;
 }
 
 /** Closes the client (tests, shutdown). */
 export async function closeRedis() {
   const c = client;
   client = null;
+  connecting = null;
   if (c?.isOpen) await c.close().catch(() => c.destroy());
   else c?.destroy();
 }
