@@ -160,3 +160,45 @@ Table names follow `docs/data-schemas.md`: `wardrobe_items` (the brief's "wardro
 - CI's migration step runs on GitHub once `dev` is pushed.
 - Not built yet: `anonymous_sessions`, `style_profiles`, `styling_requests`, `recommendations`, `selections`, `image_assets`, `analytics_events` (doc §9.2, still proposals).
 - `npm audit`: decide on the sharp, react-router and vitest upgrades (finding 3). My default: apply the non-breaking vitest/tinypool fix now, and schedule sharp 0.35 and react-router 7 as their own changes with the e2e suite.
+
+## Phase 3: retailer connectors, first import, ai service skeleton
+
+Run on 2026-11-04 on local branch `dev` (not pushed). No retailer feed arrived, so the first import uses the fixtures: the e2e test store (`e2e/fixtures/test-store.mjs`, as the Shopify retailer) and a new sample CSV (`server/retailers/fixtures/sample.csv`).
+
+### What was done
+
+| Commit | What it adds |
+|---|---|
+| `134d271` | Shared ontology: a knit, silk or wool tie is a tie. Before, "Silk Knit Tie" was filed as `top` / knitwear, because "knit" came first. This affects the live store feed too |
+| `c6dede0` | `server/retailers/`:<br>• `connector.mjs`: the normalised item and `problemsWith`<br>• `shopify.mjs`: grown out of `shopify-feed.mjs`, which now reads stores through `readShopifyProducts`<br>• `csv.mjs`: an RFC 4180 reader, one row per variant, bad rows rejected with their line<br>• `import.mjs`: one transaction; upsert on (retailer, external id); pieces that leave are kept with `removed_at` and their sizes made unavailable; changed photos clear the cut-out and vector; slots from the ontology, with unmapped and not-a-garment lists<br>• `cli.mjs`: `npm run retailers:import`, and `npm run db:seed` for the fixtures<br>The CSV spec is in `docs/CATALOGUE.md`. 20 tests. CI now migrates before the unit tests, so the database tests run there |
+| `52435e2` | `services/ai`:<br>• FastAPI 0.162 with `/health` only (no docs or schema exposed)<br>• every package pinned for Python 3.12, `python:3.12.16-slim`, a non-root user<br>• binds `HOST` (default `::`) on `PORT` (default 8000)<br>• pytest, its own `railway.json`<br>It's in `docker-compose.yml` (`HOST=0.0.0.0` locally), and `dev:up` now builds it. CI runs its pytest inside the `test` job. The gateway reports it in `/api/health` as `ai` from `AI_SERVICE_URL`, without letting it cause a 503 |
+
+### Checks
+
+| Check | Result | Evidence |
+|---|---|---|
+| Both connectors pass the contract test | pass | `src/core/__tests__/retailers.test.ts`, "the connector contract, met by both connectors": for `shopify` (the test store via `fixtureStoreFetcher`) and `csv` (the sample), every item has `problemsWith(item) = []`, exactly the contract's fields, and ids stable between reads. `Tests 20 passed (20)` with `DATABASE_URL` set; 15 passed and 5 skipped without it |
+| First import slots at least 95% of in-stock items, the rest listed | pass for the first retailer and for both together; the CSV alone is 94.7% by design | `npm run db:seed`. **Test Tailors** (Shopify fixture): `in-stock garments slotted: 9 of 9 (100%)`, `not a garment, skipped: 11 "Gift Card"`. **Harbour & Hide** (sample CSV): `18 of 19 (94.7%)`, `unmapped: WKD-OLV "The Weekender" (type none, in stock)`, `not a garment, skipped: GFT-100 "Gift Card"`, `rejected: line 32 BAD-001: price is not a number of at least 0`. Both together: 27 of 28 (96.4%). The Weekender (a bag) is in the sample on purpose, to show an unmapped piece being listed and not guessed |
+| The import is idempotent | pass | second `npm run db:seed`: `0 new, 0 changed, 0 back in the feed, 0 left the feed` for both; the test compares every product's `updated_at` before and after |
+| Removals are kept, not deleted | pass | test: without the navy blazer's rows, `removed: 1, variantsMadeUnavailable: 3`, `removed_at` set, no size available; with them back, `restored: 1` and sizes available again |
+| A failed import changes nothing | pass | test: an item whose price overflows `numeric(12,2)` fails the import, and the variant count is unchanged |
+| The live feed still works after its reader moved | pass | `real-stock` and `hybrid` unit tests `34 passed`; `SUITE=14 npm run e2e`: `11 of 11 runs passed; 110 of 110 checks passed` |
+| Gateway to ai `/health` locally | pass | `npm run dev:up`: `ai Up (healthy)`; `curl localhost:8000/health`: `{"ok":true,"service":"ai","version":"0.1.0","commit":"local","models":[]}`; `npm run dev:api` with `AI_SERVICE_URL=http://localhost:8000`: `/api/health` gives `200 {"db":"up","redis":"up","ai":"up"}`; with `docker compose stop ai`: `200 {"db":"up","redis":"up","ai":"down"}` |
+| The image binds `::` by default | pass | `docker run praxis-ai` with no `HOST`: `Uvicorn running on http://[::]:8000`; `[::1]` gets 200; `127.0.0.1` refused (IPv6 only, as on Railway) |
+| ai service tests | pass | `python -m pytest -q`: `2 passed, 1 warning` |
+| Unit tests and typecheck | pass | with `DATABASE_URL`: `Test Files 23 passed (23)`, `Tests 321 passed (321)`; `tsc` 0 errors |
+
+### Found on the way
+
+1. **The shared ontology filed knit ties as knitwear.** Fixed in `134d271`. The tie entry now comes before "knit". "Tie-Dye Tee" is still a t-shirt, checked.
+2. **Gift cards.** Both fixtures include one. The ontology already refuses them, and the import lists them as "not a garment" so they don't count as unmapped clothing. The list is `NOT_A_GARMENT` in `server/retailers/import.mjs`.
+3. **Uvicorn's `::` socket is IPv6 only.** asyncio sets `IPV6_V6ONLY`. On Railway, whose private network is IPv6, that's what we want. Locally the IPv4 port mapping was refused, so compose sets `HOST=0.0.0.0`.
+4. **`docker compose up` reused an old ai image** after a code change. `dev:up` and `dev:reset` now pass `--build`.
+5. **The first CSV retailer id depended on the file's absolute path.** Fixed before committing: ids come from the connector's id (`csv:<file name>`, `shopify:<store>`).
+6. **Starlette's test client warns that it wants `httpx2`.** Installing it was blocked, rightly, because I hadn't checked the package's provenance. `httpx` 0.28.1 stays, and the warning remains. Open item.
+
+### Open items
+
+- The real first retailer (a store address or CSV) to replace the fixtures.
+- `httpx2`: check that it's the official successor before switching (finding 6).
+- The ai service on Railway (`docs/deploy/railway.md` step 8) once staging exists.
