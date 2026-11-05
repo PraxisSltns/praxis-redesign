@@ -6,7 +6,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-// @ts-expect-error plain JavaScript module
 import { ACCOUNT_CONSENTS, checkConsents } from "../../shared/consents.mjs";
 // @ts-expect-error plain JavaScript module
 import { readLook } from "../../../server/auth/account.mjs";
