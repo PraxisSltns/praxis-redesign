@@ -246,3 +246,57 @@ Run on 2026-11-04 on local branch `dev` (not pushed), on the Week 1 laptop: Appl
 - Benchmark cut-outs on Railway's CPU once staging exists, and decide whether a GPU is needed for production volumes.
 - Image queries took 4.5 s median inside the batch, under contention, and 216 ms alone. Measure on Railway.
 - Run the batch on a schedule on staging (a Railway cron service running `npm run catalogue:process`).
+
+## Phase 5: sign-in, consent, the app on staging
+
+Run on 2026-11-05 on local branch `dev` (not pushed). Staging doesn't exist yet (no spend approval confirmed), so the staging checks couldn't run.
+
+### What was done
+
+| Commit | What it adds |
+|---|---|
+| `e7df51b`, `9a54b8d` | `server/auth/`:<br>• `provider.mjs`: the AuthProvider contract (`start` / `finish`), picked by `AUTH_PROVIDER`<br>• `magic-link.mjs`: the default. A one-use link valid for 15 minutes, with only its sha256 stored; 5 links an hour per address and 30 per network address, through Redis, refusing if Redis can't be checked; the same answer whether or not an account exists<br>• `mailer.mjs`: Resend with `RESEND_API_KEY` and `MAIL_FROM`; otherwise a local outbox, and none in production<br>• `sessions.mjs`: a 30-day session in an httpOnly, SameSite=Lax cookie (Secure on https), stored as a hash<br>• `account.mjs`: the claim and the account's looks<br>• `routes.mjs`: `/api/auth/start, verify, me, sign-out`, `/api/account/claim`, `/api/looks`; POST and DELETE only from `APP_ORIGIN` or `CORS_ORIGINS`<br>Migration `…500_sign-in-and-sessions.sql` (`sign_in_links`, `sessions`, `account_claims`). `src/shared/consents.mjs` holds the account consents (`terms`, `privacy`, draft versions). 13 tests over HTTP |
+| `7615efa` | The page, behind `VITE_AUTH=magic-link` (default `preview`, unchanged):<br>• the sign-in step is email only, with an explicit consent checkbox, then "Check your email."<br>• `/auth/verify` POSTs the token, takes it out of the address bar and returns to where sign-in began<br>• sign-in claims the guest's looks, and every load merges the account's looks from other devices<br>• saving a look also keeps it with the account; sign-out ends the server session<br>• Your data says looks are kept with the account<br>Also `e2e/signin-magic-link.mjs` |
+| `0803f05` | The Dockerfile declares the page's `VITE_*` build arguments, so a Railway variable reaches `npm run build`. `.dockerignore` keeps the ai weights (1.2 GB) out of the gateway image. `.github/workflows/e2e-staging.yml` runs the scenarios against a staging address by hand (`workflow_dispatch`, `BASE_URL`). Steps in `docs/deploy/railway.md` ("Sign-in on staging") |
+
+### Checks
+
+| Check | Result | Evidence |
+|---|---|---|
+| A guest saves a look, signs up, and still sees it | pass | `VITE_AUTH=magic-link npm run build`, then `node e2e/signin-magic-link.mjs` against Postgres and Redis: `15 of 15 checks passed`. Among them: "the guest's saved look is on Looks"; "after signing up, the guest's look is still there"; "the page is signed in as the server's account (user_8237…)"; "the look is kept with the account on the server (1)"; "on a second device, the same account sees the look"; "the server holds the look once (1)"; "each device's guest data was handed over once (2 claims)"; "sign-up recorded the consents (privacy privacy-draft-2026-11, terms terms-draft-2026-11)"; "the session cookie is httpOnly and SameSite=Lax"; "the page's script can't read the session"; "a used link is refused with a way to ask for a new one" |
+| Consents record type, version, granted_at, withdrawn_at; sign-up records the required ones | pass | `auth.test.ts`: a sign-in without consents gets `consent_missing`. After sign-up, `consents` has `privacy privacy-draft-2026-11` and `terms terms-draft-2026-11` with `granted_at` set and `withdrawn_at` null. A second sign-in adds no duplicates (`count = 2`) |
+| The hand-over happens exactly once, with no duplicates | pass | `auth.test.ts`: the first claim gives `{ moved: 2, duplicates: 1, rejected: 1, already: false }`, the second `{ moved: 0, …, already: true }`. A second guest's claim on the same account gives `{ moved: 1, duplicates: 1 }`. A guest id the account didn't sign in from gets `403` |
+| Sign-in security | pass | `auth.test.ts`: from another origin or none, `403`; the 6th link in an hour, `429`; a reused or expired link, `link_expired`; no session or a forged cookie, `401`; only `token_hash` is stored, never the token |
+| e2e passes against staging | **not run** | there's no staging yet. The workflow is in place (`e2e-staging.yml`) |
+| The default (preview) build still passes the scenarios | pass | `npm run build && npm run e2e`: `242 of 247 runs passed`. The 5 failures were 4 network drops while loading outside resources (`ERR_INTERNET_DISCONNECTED`, `ERR_NETWORK_CHANGED`, a QUIC write error, `ERR_CONNECTION_CLOSED`) and the TRY5 flake. Rerun alone (`ONLY=FACE2,P3-6b,P3-6c,P3-7c,TRY5`): `12 of 12 runs passed; 340 of 340 checks passed` |
+| Unit tests, typecheck | pass | `Test Files 25 passed, 1 skipped`, `Tests 344 passed, 12 skipped`; `tsc` 0 errors |
+
+### Found on the way
+
+1. **A reload during sign-in lost the account's looks from other devices.** The merge ran once, in the background, just after sign-in, so a reload cancelled it. The browser check caught this on the second device. Every page load with a real account now merges the account's looks.
+2. **Staging can't use the real sign-in until mail is set up.** A production server with no `RESEND_API_KEY` answers 503 for sign-in rather than pretending to send. So staging keeps `VITE_AUTH` unset (the preview) until Resend has a verified domain.
+3. **Suite 7 (accounts) tests the sign-in preview.** It passes against a preview build only. The real sign-in has its own check, `e2e/signin-magic-link.mjs`, which needs a server whose log it can read, so it runs locally, not against staging.
+4. **The gateway image would have copied the ai weights.** `COPY . .` would have taken `services/ai/.models` (1.2 GB). It's in `.dockerignore` now.
+5. **The consent wording isn't legally approved.** The checkbox reads "I agree to the Praxis terms and privacy notice." There are no terms or privacy pages to link yet. The versions are named `-draft-` so that approved text gets a new version, and accounts are asked again.
+
+### Open items
+
+- Staging: everything in `docs/deploy/railway.md`, then the e2e workflow against it.
+- Resend: a verified sending domain, `RESEND_API_KEY`, `MAIL_FROM`.
+- Legal: approved terms and privacy text with pages to link, then new consent versions.
+- The page doesn't yet withdraw account consents, and removing a look doesn't remove it from the account (it comes back on the next load).
+- Wardrobe and feedback stay on the device; only saved looks move to the account so far.
+
+## Week 1 at the end
+
+On local `dev` (not pushed), on top of `main` at `b4421f0`:
+- **Tests:** unit tests went from 280 to 344, and the browser scenarios pass as before.
+- **Database:** Postgres 16 with pgvector, 11 tables in 6 migrations.
+- **Gateway:** Redis, a private bucket, and health with per-dependency status.
+- **Catalogue:** Shopify and CSV connectors and an idempotent import.
+- **ai service:** BiRefNet cut-outs and Marqo-FashionSigLIP vectors, with pinned, baked-in weights.
+- **Batch and search:** a resumable batch job, and search by words or a photo in under 0.25 s.
+- **Accounts:** sign-in by emailed link, with consents and the guest hand-over.
+- **Delivery:** CI that opens the release PR, automerge, and Railway, Vercel and staging-e2e config.
+
+What's still needed from people: pushing `dev` and the GitHub settings (`docs/deploy/ci.md`), Railway staging (`docs/deploy/railway.md`, after the spend approval), Vercel (`docs/deploy/vercel.md`), Resend, the legal text, and the first real retailer.
