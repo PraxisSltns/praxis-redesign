@@ -27,7 +27,7 @@ export function applyCors(req, res, origins = allowedOrigins()) {
   }
   if (req.method !== "OPTIONS") return false;
   if (allowed) {
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     res.setHeader("Access-Control-Max-Age", "600");
   }

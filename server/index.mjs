@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { handleTryOn, readBody } from "./tryon.mjs";
 import { handleCutout, handleSearch, isCutoutPath } from "./search.mjs";
+import { handleAccount, isAccountPath } from "./auth/routes.mjs";
 import { handleAi, liveServices } from "./ai.mjs";
 import { handleVisual } from "./visuals.mjs";
 import { handleClientError, health, logError, RELEASE } from "./monitor.mjs";
@@ -132,6 +133,12 @@ function route(req, res) {
       return res.end();
     }
     void handleAi(req, res, ai[1]);
+    return;
+  }
+  /* Sign-in, the session, the guest-to-account hand-over and the account's saved looks (server/auth). */
+  const accountPath = req.url?.split("?")[0] ?? "";
+  if (isAccountPath(accountPath)) {
+    void handleAccount(req, res, accountPath);
     return;
   }
   /* Search the imported catalogue by words or a photo (server/search.mjs). */
