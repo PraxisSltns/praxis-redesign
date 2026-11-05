@@ -193,6 +193,7 @@ function GateDialog({ kind, onClose }: { kind: GateKind; onClose: () => void }) 
         ) : step === "signin" ? (
           <div className="a-gate-scroll px-5 pb-6 pt-2 lg:px-8 lg:pb-8">
             <SignInStep
+              surface={kind === "signin" ? gateSource.current : "gate"}
               reason={kind === "signin" ? "You can save looks without an account. Signing in keeps them together under your name." : `${kind === "dna" ? "Style DNA" : "See it on me"} is part of ${PREMIUM.name}, so I’ll need you signed in first.`}
               onSignedIn={(email, method) => {
                 signIn(email, { method, surface: kind === "signin" ? gateSource.current : "gate" });

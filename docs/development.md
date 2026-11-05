@@ -85,6 +85,22 @@ npm run db:seed && npm run catalogue:process          # import the fixtures, the
 
 `.models/` and `.venv/` are git-ignored. `CUTOUT_MODEL=full` (the default, and what the image builds) is BiRefNet with the large backbone.
 
+## Signing in for real, locally
+
+```bash
+VITE_AUTH=magic-link npm run build   # the page with the real sign-in
+npm run dev:api                      # needs DATABASE_URL and REDIS_URL from .env, and npm run db:migrate
+```
+
+Open http://localhost:3000, save a look, then sign in from the menu. With no `RESEND_API_KEY`, the link is printed in the `dev:api` log (`[sign-in email to ...]`). Open it in the same browser.
+
+The whole flow as a browser check:
+- a guest saves a look and signs up, and still sees it
+- a second device signs in and sees it
+- the look is kept once, and a used link is refused
+
+Run it with `VITE_AUTH=magic-link npm run build && node --env-file=.env e2e/signin-magic-link.mjs`.
+
 ## Keys and secrets
 
 - `.env` holds local values only and is never committed. `.env.example` is the list of every variable, with safe defaults.

@@ -134,7 +134,8 @@ export interface JourneyContextValue {
   setMode: (m: ModeId) => void;
   user: LabUser | null;
   /** Signs in (a preview) and moves this device's guest looks and feedback onto the account. */
-  signIn: (email: string | undefined, how: { method: SignInMethod; surface: SignInSurface }) => void;
+  /** `accountId`: the server's account, after a real sign-in by email link (AUTH_MODE "magic-link"). */
+  signIn: (email: string | undefined, how: { method: SignInMethod; surface: SignInSurface }, accountId?: string) => void;
   signOut: () => void;
   grantPremium: () => void;
   /** The gate open on this page, from ?gate=. */

@@ -17,6 +17,9 @@ import { anonymousId, noteVisit, rotateAnonymousId } from "../../core/identity";
 import { session } from "../../core/ids";
 import { withdrawConsent, type ImageCategory } from "../../core/images";
 import { PROVIDER_ADDRESS } from "./user";
+import { AUTH_MODE } from "../../core/config";
+import { accountLooks, claimGuestLooks, saveAccountLook, signOutAccount } from "../../core/accountApi";
+import { visibleTo } from "../../core/account";
 
 /** What a tab holds for the person using it, cleared at sign out. */
 const SIGN_OUT_TAB_KEYS = ["praxis_lab_a_face", "praxis_lab_a_item", "praxis_dna_draft", "praxis_lab_a_removed", "praxis_tryon_photo", "praxis_tryon_request"];
@@ -28,11 +31,36 @@ export function JourneyProvider({ children }: { children: ReactNode }) {
   const reduced = useReducedMotion() ?? false;
   const { mode, setMode } = useMode();
   const { user, signIn: userSignIn, signOut: userSignOut, grantPremium } = useUser();
-  const store = useLabStore("a", user?.id);
-  const { migrateToAccount } = store;
+  const labStore = useLabStore("a", user?.id);
+  const { migrateToAccount, mergeAccountLooks } = labStore;
+  /* With a real account, a look saved here is also kept on the server (a failure leaves it on this device). */
+  const store = useMemo(() => {
+    if (AUTH_MODE !== "magic-link" || !user) return labStore;
+    return {
+      ...labStore,
+      saveLook: (...args: Parameters<typeof labStore.saveLook>) => {
+        const result = labStore.saveLook(...args);
+        if (result.ok && !result.existing) void saveAccountLook(anonymousId(), result.entry).then((r) => (r.ok ? undefined : track("account_migration_failed", { part: "looks" })));
+        return result;
+      },
+    };
+  }, [labStore, user]);
 
   /* Records past their retention period go before any screen reads them (the stores cache what they read). */
   useState(() => pruneExpired());
+
+  /* With a real account, each page load brings in the account's looks saved on other devices (or lost to a reload mid sign-in). */
+  const accountId = AUTH_MODE === "magic-link" ? user?.id : undefined;
+  useEffect(() => {
+    if (!accountId) return;
+    let live = true;
+    void accountLooks().then((mine) => {
+      if (live && mine.ok) mergeAccountLooks(accountId, mine.looks);
+    });
+    return () => {
+      live = false;
+    };
+  }, [accountId, mergeAccountLooks]);
 
   /* A visit is counted once per tab; a browser that has been here before counts as returning. */
   useEffect(() => {
@@ -41,12 +69,14 @@ export function JourneyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(
-    (email: string | undefined, how: { method: SignInMethod; surface: SignInSurface }) => {
+    (email: string | undefined, how: { method: SignInMethod; surface: SignInSurface }, accountId?: string) => {
       const address = how.method === "email" ? email : PROVIDER_ADDRESS[how.method];
       if (!address) return;
-      const account = userSignIn(address);
-      track("signin_completed", how);
       const anon = anonymousId();
+      // A real account: this browser's guest looks go to the server once, and the account's looks from other devices come here.
+      const guestLooks = accountId ? labStore.looks.filter((l) => !l.owner?.userId && visibleTo(l, undefined, anon)) : [];
+      const account = userSignIn(address, accountId);
+      track("signin_completed", how);
       // Looks first; feedback only once they are safely on the account. A failed write changes nothing.
       const looks = migrateToAccount(account.id, anon);
       if (!looks.ok) {
@@ -59,8 +89,18 @@ export function JourneyProvider({ children }: { children: ReactNode }) {
       if (wardrobe.moved) writeWardrobe(wardrobe.entries);
       track("account_migrated", { looks: looks.moved, duplicates: looks.duplicates, feedback: feedbackMoved ? feedback.moved : 0, wardrobe: wardrobe.moved });
       if (!feedbackMoved) track("account_migration_failed", { part: "feedback" });
+      if (accountId) {
+        void claimGuestLooks(anon, guestLooks)
+          .then((claimed) => {
+            if (!claimed.ok) track("account_migration_failed", { part: "looks" });
+            return accountLooks();
+          })
+          .then((mine) => {
+            if (mine.ok) mergeAccountLooks(account.id, mine.looks);
+          });
+      }
     },
-    [userSignIn, migrateToAccount],
+    [userSignIn, migrateToAccount, mergeAccountLooks, labStore.looks],
   );
   const [faceImage, setFace] = useState<string | null>(() => readSession<string>(FACE_KEY));
   const [ownedItem, setItem] = useState<OwnedItem | null>(() => readSession<OwnedItem>(ITEM_KEY));
@@ -85,6 +125,7 @@ export function JourneyProvider({ children }: { children: ReactNode }) {
       }
     }
     for (const category of ["face_colour", "wardrobe_garment", "try_on", "body_fit"] as ImageCategory[]) withdrawConsent(category);
+    if (AUTH_MODE === "magic-link") void signOutAccount();
     userSignOut();
     track("signed_out", {});
   }, [userSignOut]);

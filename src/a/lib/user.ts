@@ -92,10 +92,10 @@ export function stepsFor(kind: GateKind, user: LabUser | null, options: { hasDna
 export function useUser() {
   const [user, setUser] = useState<LabUser | null>(() => read());
 
-  /** Signs in with an address (the email form, or a provider's stand-in address). */
-  const signIn = useCallback((email: string): LabUser => {
+  /** Signs in with an address (the email form, or a provider's stand-in address); with a real sign-in, as the server's account id. */
+  const signIn = useCallback((email: string, accountId?: string): LabUser => {
     const address = email.trim().toLowerCase();
-    const id = userIdFor(address);
+    const id = accountId ?? userIdFor(address);
     const next: LabUser = { id, name: nameFrom(address), email: address, premium: premiumFor(id) };
     write(next);
     setUser(next);

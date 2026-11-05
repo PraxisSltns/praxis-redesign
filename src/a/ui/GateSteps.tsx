@@ -4,8 +4,11 @@
  */
 import { useState } from "react";
 import { Apple, Check, Lock } from "lucide-react";
-import { premiumAmount, premiumPrice, PREMIUM } from "../../core/config";
-import type { SignInMethod } from "../lib/journeyContext";
+import { AUTH_MODE, premiumAmount, premiumPrice, PREMIUM } from "../../core/config";
+import { startSignIn } from "../../core/accountApi";
+import { anonymousId } from "../../core/identity";
+import { local, writeJson } from "../../core/ids";
+import type { SignInMethod, SignInSurface } from "../lib/journeyContext";
 import { isEmail } from "../lib/user";
 import { Field, PrimaryButton, QuietButton, TextButton } from "./controls";
 
@@ -103,9 +106,112 @@ interface SignInProps {
   /** Why an account is asked for here, in one line. */
   reason: string;
   onSignedIn: (email: string | undefined, method: SignInMethod) => void;
+  /** Where the sign-in began, kept for when the emailed link brings the person back (a real sign-in). */
+  surface?: SignInSurface;
 }
 
-export function SignInStep({ reason, onSignedIn }: SignInProps) {
+/** A sign-in link waiting to be opened (src/a/screens/VerifySignIn.tsx reads it). */
+export const SIGNIN_PENDING_KEY = "praxis_signin_pending";
+
+/** A real sign-in (AUTH_MODE "magic-link"): an emailed link, with the account's consents agreed here. */
+function EmailLinkSignIn({ reason, surface = "gate" }: Pick<SignInProps, "reason" | "surface">) {
+  const [email, setEmail] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+
+  const send = async () => {
+    if (busy) return;
+    if (!isEmail(email)) return setError(email.trim() ? "That address looks incomplete. Check it and try again." : "Enter your email to continue.");
+    if (!agreed) return setError("Agree to the terms and privacy notice to continue.");
+    setError(null);
+    setBusy(true);
+    const here = new URL(window.location.href);
+    here.searchParams.delete("gate");
+    writeJson(local(), SIGNIN_PENDING_KEY, { surface, returnTo: `${here.pathname}${here.search}`, at: new Date().toISOString() });
+    const answer = await startSignIn(email.trim(), anonymousId());
+    setBusy(false);
+    if (answer.ok) setSentTo(email.trim());
+    else setError(answer.error);
+  };
+
+  if (sentTo) {
+    return (
+      <div className="flex flex-col gap-6" aria-live="polite">
+        <div>
+          <h2 className="a-display">Check your email.</h2>
+          <p className="mt-3 max-w-[40ch] text-[15px] leading-6 text-[var(--muted)]">
+            I sent a sign-in link to {sentTo}. It works once, for 15 minutes, and signs you in on the device you open it on.
+          </p>
+        </div>
+        <QuietButton className="w-full" onClick={() => setSentTo(null)}>
+          Use a different email
+        </QuietButton>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="a-display">Sign in so I can remember you.</h2>
+        <p className="mt-3 max-w-[40ch] text-[15px] leading-6 text-[var(--muted)]">{reason}</p>
+      </div>
+      <form
+        noValidate
+        className="flex flex-col gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void send();
+        }}
+      >
+        <Field
+          id="gate-email"
+          label="Email"
+          value={email}
+          onChange={(v) => {
+            setEmail(v);
+            setError(null);
+          }}
+          placeholder="you@example.com"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+        />
+        <label htmlFor="gate-consent" className="flex min-h-[44px] items-start gap-3 text-[14px] leading-5">
+          <input
+            id="gate-consent"
+            type="checkbox"
+            className="mt-[2px] h-5 w-5 shrink-0 accent-[var(--accent)]"
+            checked={agreed}
+            onChange={(e) => {
+              setAgreed(e.target.checked);
+              setError(null);
+            }}
+          />
+          <span>I agree to the Praxis terms and privacy notice.</span>
+        </label>
+        {error ? (
+          <p role="alert" className="text-[13px] leading-5 text-[var(--error)]">
+            {error}
+          </p>
+        ) : null}
+        <QuietButton type="submit" className="w-full" disabled={busy} aria-busy={busy}>
+          {busy ? "Sending your link" : "Email me a sign-in link"}
+        </QuietButton>
+      </form>
+    </div>
+  );
+}
+
+export function SignInStep({ reason, onSignedIn, surface }: SignInProps) {
+  if (AUTH_MODE === "magic-link") return <EmailLinkSignIn reason={reason} surface={surface} />;
+  return <PreviewSignIn reason={reason} onSignedIn={onSignedIn} />;
+}
+
+/** The sign-in preview: no account behind it (AUTH_MODE "preview", the default). */
+function PreviewSignIn({ reason, onSignedIn }: SignInProps) {
   const [busy, setBusy] = useState<SignInMethod | null>(null);
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);

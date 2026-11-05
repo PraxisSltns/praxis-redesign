@@ -43,6 +43,7 @@ export const STORES: readonly StoreInfo[] = [
   { key: "praxis_wardrobe", where: "device", holds: "Pieces you own, by name and type (no photos)", personal: "preferences" },
   { key: "praxis_image_consent", where: "device", holds: "Which photo uses you agreed to", personal: "none" },
   { key: "praxis_sync_offer_dismissed", where: "device", holds: "Whether the sync offer was closed", personal: "none" },
+  { key: "praxis_signin_pending", where: "device", holds: "A sign-in link waiting to be opened: where to come back to (removed when it's used)", personal: "none" },
   { key: "praxis_lab_a_face", where: "tab", holds: "Your Style DNA photo", personal: "photo" },
   { key: "praxis_dna_draft", where: "tab", holds: "A Style DNA not saved yet (no photo)", personal: "preferences" },
   { key: "praxis_lab_a_removed", where: "tab", holds: "A look just removed, for Undo", personal: "preferences" },

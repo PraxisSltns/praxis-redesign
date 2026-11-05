@@ -303,6 +303,24 @@ export function useLabStore(concept: string, userId?: string) {
     [concept],
   );
 
+  /**
+   * Adds the account's looks from the server (a real sign-in) that this browser doesn't have, matched
+   * by dedupe key, so a look saved on another device shows here and none shows twice.
+   */
+  const mergeAccountLooks = useCallback(
+    (accountId: string, incoming: SavedLook[]) => {
+      let added = 0;
+      const ok = update((prev) => {
+        const have = new Set(prev.looks.filter((l) => l.owner?.userId === accountId).map((l) => l.dedupeKey));
+        const fresh = incoming.filter((l) => l && typeof l.dedupeKey === "string" && !have.has(l.dedupeKey)).map((l) => ({ ...l, owner: { anonymousSessionId: l.owner?.anonymousSessionId ?? anonymousId(), userId: accountId } }));
+        added = fresh.length;
+        return fresh.length ? { ...prev, looks: [...prev.looks, ...fresh].sort((a, b) => b.savedAt.localeCompare(a.savedAt)) } : prev;
+      });
+      return { ok, added };
+    },
+    [update],
+  );
+
   const saveDna = useCallback(
     (profile: StyleProfile) => {
       const anon = anonymousId();
@@ -330,5 +348,5 @@ export function useLabStore(concept: string, userId?: string) {
   const looks = useMemo(() => state.looks.filter((l) => visibleTo(l, userId, anon)), [state.looks, userId, anon]);
   const dna = useMemo(() => profileFor(state.profiles, userId, anon)?.profile ?? null, [state.profiles, userId, anon]);
 
-  return { looks, dna, saveLook, removeLook, restoreLook, migrateToAccount, saveDna, clearDna, reset };
+  return { looks, dna, saveLook, removeLook, restoreLook, migrateToAccount, mergeAccountLooks, saveDna, clearDna, reset };
 }

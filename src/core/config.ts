@@ -38,6 +38,13 @@ export function apiUrl(path: string, base: string = API_BASE_URL): string {
  */
 export const HAS_BACKEND: boolean = env("VITE_BACKEND") !== "none" || API_BASE_URL !== "";
 
+/**
+ * How people sign in. "preview" (the default): the sign-in screens are a visual preview with no account
+ * behind them (src/a/lib/user.ts). "magic-link": a real account on this app's server, by an emailed link
+ * (server/auth), with the guest's saved looks moved to it. Needs a server with a database.
+ */
+export const AUTH_MODE: "preview" | "magic-link" = env("VITE_AUTH") === "magic-link" ? "magic-link" : "preview";
+
 /** Which recommendation adapter answers styling requests. Only "mock" exists today; service.ts falls back to it. */
 export const RECOMMENDATION_ADAPTER: string = env("VITE_RECOMMENDATION_ADAPTER") ?? "mock";
 

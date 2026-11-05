@@ -546,7 +546,7 @@ Single photos can be deleted on their own (`deletePhoto`, `src/a/screens/YourDat
 
 ## 9. Server schema
 
-> **Built (Week 1, 2026-11):** `users`, `consents`, `wardrobe_items`, `saved_looks` and `feedback` (9.2), and the catalogue tables `retailers`, `products` and `product_variants` (9.5). They live in Postgres 16 with pgvector, are created by the SQL migrations in `server/db/migrations` (`npm run db:migrate`), and CI applies, rolls back and re-applies them on every push. No screen uses them yet. **Still proposals:** `anonymous_sessions`, `style_profiles`, `styling_requests`, `recommendations`, `selections`, `image_assets` and `analytics_events`.
+> **Built (Week 1, 2026-11):** `users`, `consents`, `wardrobe_items`, `saved_looks` and `feedback` (9.2), the catalogue tables `retailers`, `products` and `product_variants` (9.5), and the sign-in tables `sign_in_links`, `sessions` and `account_claims` (9.6). They live in Postgres 16 with pgvector, are created by the SQL migrations in `server/db/migrations` (`npm run db:migrate`), and CI applies, rolls back and re-applies them on every push. No screen uses them yet. **Still proposals:** `anonymous_sessions`, `style_profiles`, `styling_requests`, `recommendations`, `selections`, `image_assets` and `analytics_events`.
 >
 > Where the built tables differ from the proposal below, the migration is right:
 >
@@ -853,6 +853,18 @@ Filled by retailer imports (`server/retailers`, Week 1 phase 3). Migration `1762
 | `updated_at` | time | |
 
 A partial index on (`product_id`, `size`) where `available` serves "in stock in my size".
+
+### 9.6 Sign-in, sessions and the hand-over (built)
+
+Migration `1762200000500_sign-in-and-sessions.sql`, used by `server/auth` when the page is built with `VITE_AUTH=magic-link`.
+
+- `sign_in_links`: one row per emailed link. Holds `token_hash` (the sha256 of the token; the token itself is only in the email), the lowercased `email`, the `anonymous_session_id` the link was asked for from, the `consents` agreed on the form, `expires_at` (15 minutes) and `used_at` (set by the first use).
+- `sessions`: one per sign-in. Holds `session_hash` (the sha256 of the cookie's token), `user_id`, `expires_at` (30 days), `last_seen_at` and `revoked_at` (sign out).
+- `account_claims`: one per (`user_id`, `anonymous_session_id`): the guest-to-account hand-over, done once, with `looks_moved` and `looks_duplicate`. A guest id can only be claimed by the account whose link was asked for from it.
+
+The browser keeps `praxis_signin_pending` (where to come back to after the emailed link) until the link is used.
+
+At sign-up, `consents` gets one row per account consent agreed on the form (`terms`, `privacy`, at the versions in `src/shared/consents.mjs`), with `granted_at`. A returning sign-in adds a row only for a version the account doesn't already hold. Withdrawing sets `withdrawn_at` (not built in the page yet).
 
 ### 9.3 Not carried to a server
 
