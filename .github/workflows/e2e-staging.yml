@@ -1,0 +1,53 @@
+# The browser scenarios (e2e/scenarios.mjs) against the staging site, by hand: Actions > "E2E against
+# staging" > Run workflow. Not on every push: it takes several minutes and needs staging up. It only reads
+# the site the way a visitor does; no secrets are used.
+#
+# Suites 12 (AI contracts) and 14 (hybrid catalogue) need a server started by the test run itself, with
+# a stand-in Gemini and test store, so they're left out by default against a deployed site.
+name: E2E against staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Staging address, for example https://praxis-staging.up.railway.app
+        required: true
+      suites:
+        description: Which suites (comma separated)
+        default: 1,2,3,4,5,6,7,8,9,10,11,13,15
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-staging
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright-core install --with-deps chromium
+      - name: Staging is up
+        env:
+          URL: ${{ github.event.inputs.url }}
+        run: curl -fsS "${URL%/}/api/health"
+      - name: Scenarios
+        env:
+          BASE_URL: ${{ github.event.inputs.url }}
+          SUITE: ${{ github.event.inputs.suites }}
+        run: npm run e2e
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-staging-report
+          path: e2e/results
+          retention-days: 14
