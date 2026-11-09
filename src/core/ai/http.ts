@@ -5,9 +5,10 @@
  * Marked billable unless the server says its provider is free, so a paid one never runs while paid
  * calls are switched off.
  */
+import { apiUrl } from "../config";
 import type { ProviderAnswer, ServiceName, ServiceProvider } from "./envelope";
 
-export const AI_ENDPOINT = "/api/ai";
+export const AI_ENDPOINT = apiUrl("/api/ai");
 
 const STATUSES = new Set(["succeeded", "partial", "empty", "failed", "disabled"]);
 

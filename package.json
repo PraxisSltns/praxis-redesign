@@ -9,17 +9,32 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "node server/index.mjs",
+    "dev:api": "node --env-file-if-exists=.env server/index.mjs",
     "test": "vitest run",
     "e2e": "node e2e/scenarios.mjs",
-    "photos:check": "vitest run src/config"
+    "photos:check": "vitest run src/config",
+    "dev:up": "docker compose up -d --wait --build",
+    "dev:down": "docker compose down",
+    "dev:reset": "docker compose down -v && docker compose up -d --wait --build",
+    "db:migrate": "node --env-file-if-exists=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations --migration-file-language sql --check-order up",
+    "db:seed": "node --env-file-if-exists=.env server/retailers/cli.mjs --fixtures",
+    "db:migrate:down": "node --env-file-if-exists=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations --migration-file-language sql --check-order down",
+    "db:migrate:create": "node node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations --migration-file-language sql create",
+    "retailers:import": "node --env-file-if-exists=.env server/retailers/cli.mjs",
+    "catalogue:process": "node --env-file-if-exists=.env server/catalogue/cli.mjs",
+    "ai:dev": "cd services/ai && .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1161.0",
     "@mediapipe/tasks-vision": "^1.1.0",
     "lucide-react": "^0.462.0",
     "motion": "^13.4.4",
+    "node-pg-migrate": "^8.0.4",
+    "pg": "^8.23.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.1",
+    "redis": "^5.12.1",
     "sharp": "^0.34.5"
   },
   "devDependencies": {

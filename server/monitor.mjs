@@ -6,7 +6,8 @@
  * without its query, and a few stack frames from the app's own files.
  *
  * GET /api/health says which build is running and that no paid provider is switched on, for the
- * smoke tests after a deploy (tools/smoke.mjs).
+ * smoke tests after a deploy (tools/smoke.mjs). server/index.mjs adds `dependencies` (Postgres and
+ * Redis, server/health.mjs) and answers 503 with `ok: false` when a configured one is down.
  */
 import { readFileSync } from "node:fs";
 import { AI_SERVICES, FREE_DEFAULTS, providerName } from "./ai.mjs";

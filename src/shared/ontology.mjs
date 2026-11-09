@@ -7,9 +7,12 @@
 
 /** Most specific first: the first match decides (so "oxford shoes" are shoes before "oxford" makes a shirt). Each: id, slot, layer (tops only), formality, words. */
 export const SUBCATEGORIES = [
+  // A knit or silk tie is a tie, not knitwear: this comes before "knit" (the plain "tie" entry stays near the end).
+  { id: "tie", slot: "extras", formality: 5, words: /\b(knit|knitted|silk|wool|linen|cashmere|grenadine|neck|bow) ties?\b/ },
   { id: "suit-trousers", slot: "bottom", formality: 5, words: /\bsuit (trousers?|pants?)\b/ },
   { id: "suit-jacket", slot: "top", layer: "outer", formality: 5, words: /\b(suit jacket|suit|tuxedo|dinner jacket)\b/ },
-  { id: "dress-shoes", slot: "shoes", formality: 5, words: /\b((oxford|derby|dress|lace-up|leather) shoes?|brogues?|monk ?straps?)\b/ },
+  // "Leather oxfords" are shoes: an oxford named by its leather or suede is never the shirt (that rule comes later).
+  { id: "dress-shoes", slot: "shoes", formality: 5, words: /\b((oxford|derby|dress|lace-up|leather) shoes?|(leather|suede|patent|calf) (oxfords?|derbys?|derbies)|brogues?|monk ?straps?)\b/ },
   { id: "blazer", slot: "top", layer: "outer", formality: 4, words: /\b(blazers?|sport ?coats?|tailored jackets?)\b/ },
   { id: "overcoat", slot: "top", layer: "outer", formality: 4, words: /\b(overcoats?|topcoats?|trench( coats?)?|peacoats?|car coats?)\b/ },
   { id: "overshirt", slot: "top", layer: "outer", formality: 2, words: /\b(overshirts?|shirt jackets?|shackets?|chore (coats?|jackets?))\b/ },

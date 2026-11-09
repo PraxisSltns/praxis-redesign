@@ -1,0 +1,108 @@
+# Developing locally
+
+The page (Vite) and the gateway (`server/index.mjs`) run on your machine. Their dependencies (Postgres 16 with pgvector, Redis 7 and S3-compatible storage) run in Docker (`docker-compose.yml`). Nothing here reaches staging, production or a paid service.
+
+Needs Node 22.9 or newer, and Docker Desktop (or another Docker engine with Compose v2).
+
+## First run
+
+```bash
+git clone https://github.com/PraxisSltns/praxis-redesign.git
+cd praxis-redesign
+npm ci
+cp .env.example .env        # local defaults; .env is git-ignored
+npm run dev:up              # Postgres, Redis and storage, waits until all are healthy
+npm run db:migrate          # the database tables
+npm run dev                 # the page on http://localhost:5173
+```
+
+The page works on its own: with no gateway, every look comes from the built-in rules engine and any `/api` call fails quietly.
+
+To run the page against your local gateway:
+
+```bash
+npm run build               # the gateway serves dist/
+npm run dev:api             # the gateway on http://localhost:3000, reading .env
+```
+
+Then either open http://localhost:3000 (page and gateway on one origin, like Railway), or set `VITE_API_BASE_URL=http://localhost:3000` in `.env` and keep `npm run dev` on :5173 (the gateway allows it through `CORS_ORIGINS`). Clear `VITE_API_BASE_URL` before `npm run build` again, because Vite compiles it into builds too.
+
+## Scripts
+
+| Script | What it does |
+|---|---|
+| `npm run dev:up` | Builds the ai service if its code changed, starts the containers and waits until each health check passes. The `s3-bucket` job creates the bucket and exits. |
+| `npm run dev:down` | Stops the containers and keeps the data. |
+| `npm run dev:reset` | Stops the containers, **deletes their volumes** (database, Redis, bucket) and starts them again empty. |
+| `npm run db:migrate` | Applies the database migrations (`server/db/migrations`, node-pg-migrate, SQL files). |
+| `npm run db:migrate:down` | Rolls back the last migration (`-- 1000` rolls back all of them). |
+| `npm run db:migrate:create -- <name>` | Makes a new SQL migration file with `-- Up Migration` and `-- Down Migration` sections. |
+| `npm run db:seed` | Loads local sample data. |
+| `npm run dev:api` | The gateway with `.env` loaded (`npm start` is what Railway runs, with no `.env`). |
+| `npm run retailers:import -- ...` | Imports a Shopify store or a CSV into the database (`docs/CATALOGUE.md`). `npm run db:seed` imports the three fixture catalogues. |
+| `npm run catalogue:process` | The batch job: cut-outs and vectors for every product missing them (needs the ai service with its models). |
+| `npm run ai:dev` | The ai service from its venv on :8000, outside Docker (see "The ai service's models" below). |
+| `npm test`, `npm run build`, `npm run e2e` | Unit tests, typecheck and build, the browser scenarios (see `docs/testing-report.md`). |
+
+## The containers
+
+| Service | Image | Port | Health check |
+|---|---|---|---|
+| `postgres` | `pgvector/pgvector:0.8.0-pg16` | 5433 | `pg_isready` |
+| `redis` | `redis:7.4-alpine` (append-only file on) | 6379 | `redis-cli ping` |
+| `s3` | `chrislusf/seaweedfs:4.50` (S3 API) | 8333 | `GET /healthz` |
+| `s3-bucket` | `amazon/aws-cli:2.39.3` | none | runs once, creates `S3_BUCKET` |
+| `ai` | built from `services/ai` (`python:3.12.16-slim`) | 8000 | `GET /health` |
+
+Postgres is published on **5433**, not 5432, so it doesn't clash with a Postgres already installed on the machine (a Homebrew `postgresql@14` on 5432 was answering in its place). Ports can be moved with `POSTGRES_PORT`, `REDIS_PORT` and `S3_PORT` in `.env` if something else on your machine uses them. Update the matching `DATABASE_URL`, `REDIS_URL` and `S3_ENDPOINT` too.
+
+The decision was MinIO for local storage. MinIO no longer publishes its images: Docker Hub refuses `minio/minio` and `minio/mc`, and quay.io refuses `quay.io/minio/minio` (checked 2026-11-03). SeaweedFS (Apache 2.0) speaks the same S3 API, so code that talks to it with an S3 client talks to a Railway bucket the same way.
+
+Useful checks:
+
+```bash
+docker compose ps
+docker compose exec postgres psql -U praxis -d praxis -c "\dt"
+curl -s localhost:3000/api/health   # "dependencies": {"db": "up", "redis": "up"} with npm run dev:api
+docker compose exec redis redis-cli ping
+docker compose run --rm s3-bucket   # make the bucket again (safe if it exists)
+```
+
+## The ai service's models
+
+The ai service's image bakes in both models, about 1.2 GB of weights, and needs several GB of memory to run them. On a small machine (8 GB, as on the Week 1 laptop) running them inside Docker Desktop's VM isn't practical. Run the service from a venv instead, with the smaller cut-out model:
+
+```bash
+cd services/ai
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+CUTOUT_MODEL=lite .venv/bin/python -m app.download    # once: the pinned weights into services/ai/.models
+cd ../..
+docker compose stop ai                                # free :8000
+CUTOUT_MODEL=lite npm run ai:dev                      # loads both models, about 10 s
+npm run db:seed && npm run catalogue:process          # import the fixtures, then cut-outs and vectors
+```
+
+`.models/` and `.venv/` are git-ignored. `CUTOUT_MODEL=full` (the default, and what the image builds) is BiRefNet with the large backbone.
+
+## Signing in for real, locally
+
+```bash
+VITE_AUTH=magic-link npm run build   # the page with the real sign-in
+npm run dev:api                      # needs DATABASE_URL and REDIS_URL from .env, and npm run db:migrate
+```
+
+Open http://localhost:3000, save a look, then sign in from the menu. With no `RESEND_API_KEY`, the link is printed in the `dev:api` log (`[sign-in email to ...]`). Open it in the same browser.
+
+The whole flow as a browser check:
+- a guest saves a look and signs up, and still sees it
+- a second device signs in and sees it
+- the look is kept once, and a used link is refused
+
+Run it with `VITE_AUTH=magic-link npm run build && node --env-file=.env e2e/signin-magic-link.mjs`.
+
+## Keys and secrets
+
+- `.env` holds local values only and is never committed. `.env.example` is the list of every variable, with safe defaults.
+- A `VITE_` variable is compiled into the page that every visitor downloads. Never put a key or secret in one.
+- Paid AI stays off locally: leave `GEMINI_API_KEY` empty unless you mean to use the free writer and the budgeted outfit pictures (`docs/AI-HANDOVER.md`).

@@ -4,6 +4,7 @@
  */
 import { useState } from "react";
 import { track } from "../../core/analytics";
+import { AUTH_MODE } from "../../core/config";
 import { deleteLocalData, wardrobeEntries, wardrobePhoto } from "../../core/data";
 import { feedbackStore } from "../../core/feedback";
 import { visibleTo } from "../../core/account";
@@ -76,7 +77,11 @@ export function YourData() {
       <main className="mx-auto flex max-w-[640px] flex-col gap-8 px-5 pb-16 pt-4 lg:px-10">
         <div>
           <h1 className="a-display">Your data on this device</h1>
-          <p className="mt-4 max-w-[48ch] leading-6 text-[var(--muted)]">Praxis keeps these in this browser only. Nothing is sent to a server yet. Photos stay in this tab and are gone when you close it.</p>
+          <p className="mt-4 max-w-[48ch] leading-6 text-[var(--muted)]">
+            {AUTH_MODE === "magic-link" && user
+              ? "Praxis keeps these in this browser. Your saved looks are also kept with your account, so they follow you when you sign in elsewhere. Photos stay in this tab and are gone when you close it."
+              : "Praxis keeps these in this browser only. Nothing is sent to a server yet. Photos stay in this tab and are gone when you close it."}
+          </p>
         </div>
 
         <div role="list">

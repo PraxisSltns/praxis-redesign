@@ -20,7 +20,7 @@ import { callService, buildServiceRequest } from "../ai/envelope";
 import { httpProvider } from "../ai/http";
 import { DEFINITIONS, type VisualizationPayload, type VisualizationResult } from "../ai/services";
 import { liveServices } from "../ai/words";
-import { ALLOW_BILLABLE_IMAGES } from "../config";
+import { ALLOW_BILLABLE_IMAGES, apiUrl } from "../config";
 
 /** The one model every look is shown on, so the three looks compare like for like. */
 export interface ModelSetup {
@@ -189,7 +189,7 @@ export function serverVisualizationProvider(info: { provider: string; version: s
       const answer = await callService(DEFINITIONS.outfit_visualization, http, buildServiceRequest("outfit_visualization", payload, who), { signal, retries: 0, timeoutMs: VISUALIZATION_TIMEOUT_MS, ...(info.approved ? { allowBillable: true } : {}) });
       const r = answer.result;
       if ((answer.status === "succeeded" || answer.status === "partial") && r && r.outfitId === spec.outfitId) {
-        return { status: r.generated ? "ready" : "mock", imageUrl: r.imageUrl, fidelity: r.fidelity === "exact" ? "verified" : "illustrative", provider: info.provider, cacheKey: spec.cacheKey, costUsd: Number((answer.metadata as { costUsd?: unknown } | undefined)?.costUsd) || 0, ...(r.checks ? { checks: r.checks } : {}) };
+        return { status: r.generated ? "ready" : "mock", imageUrl: r.imageUrl ? apiUrl(r.imageUrl) : r.imageUrl, fidelity: r.fidelity === "exact" ? "verified" : "illustrative", provider: info.provider, cacheKey: spec.cacheKey, costUsd: Number((answer.metadata as { costUsd?: unknown } | undefined)?.costUsd) || 0, ...(r.checks ? { checks: r.checks } : {}) };
       }
       return { status: "failed", fidelity: "unknown", provider: info.provider, cacheKey: spec.cacheKey, costUsd: Number((answer.metadata as { costUsd?: unknown } | undefined)?.costUsd) || 0, error: answer.error?.message ?? answer.status, retryable: answer.error?.retryable ?? false };
     },

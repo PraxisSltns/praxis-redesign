@@ -4,6 +4,7 @@
 
 `<name>.mjs` files for `server/ai.mjs` export `id`, `version`, `billable`, `SERVICES` (the services they answer) and `run(request, { signal })`. See `docs/AI-SERVICES.md`.
 
+- `shopify-feed.mjs`: real pieces from one Shopify store for `?stock=live` tabs (`product_matching`). It reads the store's list with `server/retailers/shopify.mjs`, the same reader the catalogue import uses.
 - `gemini-free.mjs`: the stylist's words (`styling_explanation`) on Gemini's free tier. Switches on when `GEMINI_API_KEY` is set; text only, never a photo.
 
 ## Try-on providers

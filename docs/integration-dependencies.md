@@ -29,6 +29,16 @@ Phase 2 added one service layer for all nine AI services, with contracts, mocks 
 | `VITE_ALLOW_BILLABLE_IMAGES` | `src/core/config.ts:27` | `true` or anything else (off) | `guardBillable` (`src/core/vision.ts:157`) refuses any adapter with `billable: true` while off. No billable adapter exists yet. |
 | `__APP_VERSION__` | `vite.config.ts` (`define`), `src/core/config.ts:9` | `package.json` version | Stamped on every analytics event. |
 | `PREMIUM` | `src/core/config.ts:30` | Constant: `Premium`, 9, `USD`, `month` | The name and price shown in the gate. Not an environment value. |
+| `VITE_API_BASE_URL` | `src/core/config.ts` (`apiUrl`) | an address such as `http://localhost:3000`; empty (default) | Every `/api` call and `/api` picture goes to that server instead of the page's own origin. Only for builds served away from the server (Vite dev, a preview host). An address only, never a key. |
+| `VITE_BACKEND` | `src/core/config.ts` (`HAS_BACKEND`) | `none`, or unset (default) | `none` with no `VITE_API_BASE_URL`: a static preview with no server. The page makes no `/api` call (no live-services check, no error reports) and uses the mocks. Set in `vercel.json`. |
+| `DATABASE_URL`, `DB_*` | `server/db.mjs` (server environment) | a Postgres address; pool size and timeouts | The gateway's Postgres pool. Unset: no database, and `/api/health` reports `db: "off"`. |
+| `REDIS_URL`, `REDIS_CONNECT_TIMEOUT_MS` | `server/redis.mjs` (server environment) | a Redis address | The gateway's Redis client. Unset: `redis: "off"`. |
+| `AI_SERVICE_URL` | `server/health.mjs` (server environment) | the ai service's address, such as `http://ai.railway.internal:8000` | Reported in `/api/health` as `ai` (`up`, `down`, `off`). It doesn't affect the 503. |
+| `VITE_AUTH` | `src/core/config.ts` (`AUTH_MODE`) | `preview` (default) or `magic-link` | `preview`: the sign-in screens are a visual preview (no account). `magic-link`: a real account on this server by emailed link, with consents and the guest's saved looks moved to it (`server/auth`). |
+| `AUTH_PROVIDER` | `server/auth/provider.mjs` (server environment) | `magic-link` (default) or `off` | Which AuthProvider signs people in. Another provider (Clerk) implements the same `start` / `finish`. |
+| `APP_ORIGIN` | `server/auth/provider.mjs` (server environment) | the site's address, such as `https://praxis-staging.up.railway.app` | Where emailed sign-in links point, and the origin POSTs must come from. Required in production: the request's Host header is never used. |
+| `RESEND_API_KEY`, `MAIL_FROM` | `server/auth/mailer.mjs` (server environment) | a Resend key; a verified sender such as `Praxis <hello@mail.praxis.example>` | Sends sign-in emails. Unset outside production: the link goes to the server log. Unset in production: sign-in answers that it isn't available. |
+| `CORS_ORIGINS` | `server/cors.mjs` (server environment) | comma list of exact origins, such as `http://localhost:5173`; empty (default) | The origins allowed to call `/api` from another site, with credentials. Unset: same origin only. |
 | `VITE_AI_PROVIDERS` | `src/core/config.ts` | comma list of service names; empty (default) | A listed service answers through `src/core/ai` and this app's server (`POST /api/ai/<service>`); see `docs/AI-SERVICES.md`. |
 | `AI_PROVIDER_<SERVICE>`, `ALLOW_BILLABLE_AI` | `server/ai.mjs` (server environment) | provider module name or `off`; `true` | Which provider module answers a service, and whether a paid one may run. Unset: every service answers `disabled`, except a free provider whose key is set. |
 | `RETAIL_SHOPIFY_STORE`, `RETAIL_SHOPIFY_FOR`, `RETAIL_SHOPIFY_NAME` | `server/providers/shopify-feed.mjs` (server environment) | a US Shopify store's address; `test` (default) or `everyone`; a display name | Real pieces from one store for testing (`product_matching`). With `test`, only a tab opened with `?stock=live` uses it. |
@@ -380,3 +390,17 @@ All customer data lives in this browser. `STORES` (`src/core/data.ts:30`) lists 
 | Try-on | `src/a/screens/moment/TryOn.tsx` | The rendering pipeline behind `TryOnAdapter`, then ask for the photo again (section 3). |
 | Colour analysis | `src/core/vision.ts` (`mockColourAnalysis`) | A `ColourAnalysisAdapter`. Today the same sample estimate for every photo, marked `source: "sample"` (section 2). |
 | Images | `public/images/*.jpg`, `src/assets/styles/*.jpg` | Catalogue looks and inspiration presets; real product or generated images replace the look photographs. |
+
+## Licence inventory: models and their code (Week 1, 2026-11)
+
+The models the ai service (`services/ai`) runs. Weights are fetched once at image build time, at the exact revision below (`services/ai/app/models.py`), and never at run time. Checked on huggingface.co on 2026-11-04.
+
+| Use | Model | Repository and revision | Licence | Notes |
+|---|---|---|---|---|
+| Cut-outs (default) | BiRefNet (Swin-L backbone), 1024 x 1024 input | `ZhengPeng7/BiRefNet` @ `e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4` | MIT | Loaded with `trust_remote_code`. Its `birefnet.py` and `BiRefNet_config.py` at this revision were read before use: no network, subprocess or file access, and with `bb_pretrained: false` no `torch.load`, so weights come only from `model.safetensors`. Changing the revision means reviewing the code again. The weights are trained on public segmentation datasets (DIS5K and others) with their own terms; the model card states MIT for the release. |
+| Cut-outs (small machines) | BiRefNet_lite (Swin-T backbone) | `ZhengPeng7/BiRefNet_lite` @ `aa62cd87eafb9cc43056d08ef3615a14628b831d` | MIT | The same code as above except the backbone index and one comment (compared line by line). Chosen with `CUTOUT_MODEL=lite`. |
+| Embeddings, text and image | Marqo-FashionSigLIP (ViT-B/16 SigLIP, fine-tuned on fashion), 768 dimensions | `Marqo/marqo-fashionSigLIP` @ `c56244cc94f92419e8369fa71efdaf403b124ce8` | Apache-2.0 | Loaded through open_clip (`local-dir:`), with `open_clip_model.safetensors`. The pickled `.bin` weights are never downloaded. The repository's own `marqo_fashionSigLIP.py` (for transformers) isn't used. |
+
+Libraries the service depends on for these, with their licences: PyTorch and torchvision (BSD-3-Clause), open_clip (MIT), transformers, huggingface_hub, safetensors and tokenizers (Apache-2.0), timm (Apache-2.0), kornia (Apache-2.0), einops (MIT), Pillow (MIT-CMU), NumPy (BSD-3-Clause), FastAPI (MIT), Uvicorn (BSD-3-Clause), httpx2 (BSD-3-Clause). Exact versions are in `services/ai/requirements.txt`.
+
+Before customers see cut-outs of a retailer's photos, the retailer has to allow derived images (see `docs/CATALOGUE.md`, "Photos").

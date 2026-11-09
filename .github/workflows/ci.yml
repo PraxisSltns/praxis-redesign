@@ -1,0 +1,121 @@
+# Tests and builds every push to dev and main and every pull request into main. The job named "test" is
+# the check branch protection requires on main, so keep its name. After a green push to dev, "open-pr"
+# opens the one dev -> main pull request, or refreshes its body, as github-actions[bot], so a person can
+# approve it (automerge.yml then merges it). No secrets are used; no paid service can be reached.
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      # The same Postgres and pgvector as docker-compose.yml and Railway.
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_USER: praxis
+          POSTGRES_PASSWORD: praxis
+          POSTGRES_DB: praxis
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U praxis -d praxis"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+      # The catalogue job's queue (src/core/__tests__/catalogue.test.ts uses database 15).
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://praxis:praxis@localhost:5432/praxis
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The database tests (imports into Postgres) need the tables first.
+      - run: npm run db:migrate
+      - run: npm test
+      - run: npm run build
+      # The ai service (services/ai): its own pinned dependencies and tests.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/ai/requirements-dev.txt
+      - name: ai service tests
+        working-directory: services/ai
+        run: |
+          pip install -r requirements-dev.txt
+          python -m pytest -q
+      # Every migration rolls back to an empty database and applies again.
+      - name: Migrations down and up again
+        run: |
+          npm run db:migrate:down -- 1000
+          tables=$(psql "$DATABASE_URL" -tAc "select count(*) from pg_tables where schemaname = 'public' and tablename <> 'pgmigrations'")
+          if [ "$tables" != "0" ]; then echo "::error::$tables tables left after migrating down"; exit 1; fi
+          npm run db:migrate
+
+  open-pr:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Open or update the dev -> main pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          commits=$(git log --oneline origin/main..origin/dev)
+          if [ -z "$commits" ]; then
+            echo "dev has nothing main lacks; no pull request needed."
+            exit 0
+          fi
+          {
+            echo "Commits on dev that main does not have yet:"
+            echo
+            echo '```'
+            echo "$commits"
+            echo '```'
+            echo
+            echo "Tests and build passed: $RUN_URL"
+            echo
+            echo "Approving this pull request merges it (automerge.yml), and Railway deploys staging from main."
+          } > body.md
+          number=$(gh pr list --base main --head dev --state open --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --body-file body.md
+            echo "Updated pull request #$number."
+          else
+            gh pr create --base main --head dev --title "Release dev to main" --body-file body.md
+          fi

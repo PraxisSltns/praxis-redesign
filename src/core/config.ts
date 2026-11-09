@@ -17,6 +17,34 @@ function env(name: string): string | undefined {
   }
 }
 
+/**
+ * Where this app's server is, for a build served from somewhere else (a Vite dev server, a preview host).
+ * Empty (the default): the page calls its own origin, as on Railway. Set: every /api call and every
+ * /api picture goes to this address instead, for example http://localhost:3000. The server must list
+ * the page's origin in CORS_ORIGINS. An address only: never put a key or secret in a VITE_ variable.
+ */
+export const API_BASE_URL: string = (env("VITE_API_BASE_URL") ?? "").replace(/\/+$/, "");
+
+/** A path on this app's server (/api/...) made absolute when API_BASE_URL is set; anything else unchanged. */
+export function apiUrl(path: string, base: string = API_BASE_URL): string {
+  return base && path.startsWith("/api/") ? `${base}${path}` : path;
+}
+
+/**
+ * Whether this build has a server to talk to. A static preview with none (Vercel builds with
+ * VITE_BACKEND=none) makes no /api call at all: the looks come from the rules engine, the page never
+ * asks which services are live, and errors aren't reported. Setting VITE_API_BASE_URL brings the server
+ * back, so a preview pointed at staging works without changing this.
+ */
+export const HAS_BACKEND: boolean = env("VITE_BACKEND") !== "none" || API_BASE_URL !== "";
+
+/**
+ * How people sign in. "preview" (the default): the sign-in screens are a visual preview with no account
+ * behind them (src/a/lib/user.ts). "magic-link": a real account on this app's server, by an emailed link
+ * (server/auth), with the guest's saved looks moved to it. Needs a server with a database.
+ */
+export const AUTH_MODE: "preview" | "magic-link" = env("VITE_AUTH") === "magic-link" ? "magic-link" : "preview";
+
 /** Which recommendation adapter answers styling requests. Only "mock" exists today; service.ts falls back to it. */
 export const RECOMMENDATION_ADAPTER: string = env("VITE_RECOMMENDATION_ADAPTER") ?? "mock";
 

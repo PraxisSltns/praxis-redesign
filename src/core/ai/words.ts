@@ -6,6 +6,7 @@
  * Only names and answers are sent, never a photo. Anything that is late, refused, malformed or out of
  * voice leaves the rules engine's words in place, so the looks never wait on it for long or break.
  */
+import { HAS_BACKEND } from "../config";
 import type { StylingRequest, StylingResponse } from "../contracts";
 import { callService, buildServiceRequest } from "./envelope";
 import { httpProvider, AI_ENDPOINT } from "./http";
@@ -31,6 +32,8 @@ let live: Promise<LiveService[]> | null = null;
 export function liveServices(fetcher: typeof fetch = (...a) => fetch(...a)): Promise<LiveService[]> {
   if (!live) {
     live = (async () => {
+      // A preview with no server (VITE_BACKEND=none): nothing is live, and nothing is asked.
+      if (!HAS_BACKEND) return [];
       try {
         const res = await fetcher(AI_ENDPOINT, { headers: { Accept: "application/json" } });
         if (!res.ok) return [];
