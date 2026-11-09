@@ -116,7 +116,12 @@ describe.skipIf(!ready)("the batch job and search, on Postgres and Redis", async
   });
 
   it("carries on after a stop: a job a worker had taken is put back", async () => {
-    await redis.lMove(KEYS.queue, KEYS.processing, "LEFT", "RIGHT");
+    // A piece with a good photo, so the missing one is still queued for the next test,
+    // whatever order the ids (which change each run) put them in.
+    const { rows } = await pool.query("SELECT product_id FROM products WHERE retailer_id = $1 AND images->>0 NOT LIKE '%missing.jpg' ORDER BY product_id LIMIT 1", [retailerId]);
+    const taken = rows[0].product_id;
+    expect(await redis.lRem(KEYS.queue, 1, taken)).toBe(1);
+    await redis.rPush(KEYS.processing, taken);
     const report = await runWorker({ ...deps(), limit: 1 });
     expect(report.recovered).toBe(1);
     expect(await redis.lLen(KEYS.processing)).toBe(0);
