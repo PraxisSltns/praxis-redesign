@@ -34,7 +34,7 @@ The project already has a service whose public address is `praxis-redesign-produ
    If the template runs a different major version, set its image to `pgvector/pgvector:0.8.0-pg16` (Settings > Source > Image) before any data goes in.
 4. **Redis.** New > Database > Redis.
 5. **Bucket.** New > Bucket, in EU West. Note the variable names it lists on its Variables tab (endpoint, bucket name, access key, secret, region).
-6. **Gateway service.** New > GitHub repo > `bobibcgroup/praxis-redesign`. Then:
+6. **Gateway service.** New > GitHub repo > `PraxisSltns/praxis-redesign`. Then:
    - Settings > Source: **branch `main`**, and turn **Wait for CI** on, so a deploy waits for the `test` check on that commit.
    - Settings > Networking: generate a public domain (this is the staging address).
    - Settings > Volumes: add a volume (mount `/data`) so outfit pictures survive deploys (`RAILWAY_VOLUME_MOUNT_PATH`).

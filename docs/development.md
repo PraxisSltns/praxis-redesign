@@ -7,7 +7,7 @@ Needs Node 22.9 or newer, and Docker Desktop (or another Docker engine with Comp
 ## First run
 
 ```bash
-git clone https://github.com/bobibcgroup/praxis-redesign.git
+git clone https://github.com/PraxisSltns/praxis-redesign.git
 cd praxis-redesign
 npm ci
 cp .env.example .env        # local defaults; .env is git-ignored

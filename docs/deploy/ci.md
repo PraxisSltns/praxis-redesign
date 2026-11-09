@@ -21,7 +21,7 @@ developers run the backend locally with docker compose (docs/development.md)
 
 ## One-time setup (a repository admin runs these)
 
-Replace `OWNER/REPO` with `bobibcgroup/praxis-redesign`.
+Replace `OWNER/REPO` with `PraxisSltns/praxis-redesign`.
 
 1. Push `dev` and make it the default branch:
 
@@ -30,7 +30,8 @@ Replace `OWNER/REPO` with `bobibcgroup/praxis-redesign`.
    gh repo edit OWNER/REPO --default-branch dev
    ```
 
-2. Let Actions open pull requests (Settings > Actions > General > Workflow permissions > "Allow GitHub Actions to create and approve pull requests"):
+2. Let Actions open pull requests (Settings > Actions > General > Workflow permissions > "Allow GitHub Actions to create and approve pull requests").
+   An organisation owner must first allow it for the organisation (Organization settings > Actions > General > Workflow permissions); until then the repository setting is greyed out and the API answers `409 The organization does not allow GitHub Actions to create or approve pull requests`. Then:
 
    ```bash
    gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow \

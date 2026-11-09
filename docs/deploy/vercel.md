@@ -15,7 +15,7 @@ Vercel builds the page from `dev` only, in mock mode, as a static site. There's 
 
 ## Dashboard steps (the Praxis Vercel owner)
 
-1. Add New > Project > import `bobibcgroup/praxis-redesign`. Framework preset: Vite (the file overrides the commands anyway).
+1. Add New > Project > import `PraxisSltns/praxis-redesign`. Framework preset: Vite (the file overrides the commands anyway).
 2. Settings > Git > **Production Branch: `dev`**.
 3. Settings > Environment Variables: none are needed. Never add a key. Every `VITE_` value is public.
    - Optional, later: `VITE_API_BASE_URL=https://<staging gateway>` to point the preview at staging. The gateway then needs the Vercel address in `CORS_ORIGINS`. Leave it unset for mock mode.
