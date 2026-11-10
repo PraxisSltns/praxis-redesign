@@ -75,7 +75,7 @@ describe("a CSV store's id", () => {
     for (const bad of ["Harbour", "harbour hide", "harbour--hide", "-x", "x".repeat(61)]) await expect(connectorsFor({ csv: "p.csv", store: bad })).rejects.toThrow(/--store must be/);
   });
   it("leaves the fixture stores where they were", async () => {
-    const ids = (await connectorsFor({ fixtures: true })).map((c) => c.id);
+    const ids = (await connectorsFor({ fixtures: true })).map((c: { id: string }) => c.id);
     expect(ids).toEqual(["shopify:test-tailors.praxis-test.example", "csv:sample", "csv:library"]);
   });
 });
