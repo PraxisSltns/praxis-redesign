@@ -139,11 +139,11 @@ try {
   check((await cards(p)) === 0, "the first device drops the look removed on the second");
 
   // Wardrobe pieces and feedback follow the account too.
-  const rows = (page) => page.getByRole("list", { name: "Pieces you own" }).locator(":scope > li");
+  const pieceRows = (page) => page.getByRole("list", { name: "Pieces you own" }).locator(":scope > li");
   const wardrobe = async (page) => {
     await page.goto(`${BASE}/wardrobe?mode=light`);
     await page.waitForTimeout(1500);
-    return rows(page).count();
+    return pieceRows(page).count();
   };
   await wardrobe(p);
   await p.getByRole("button", { name: "Add a piece" }).click();
