@@ -11,7 +11,7 @@ import { createCsvConnector, itemsFromRows, parseCsv } from "../../../server/ret
 // @ts-expect-error plain JavaScript module
 import { createShopifyConnector } from "../../../server/retailers/shopify.mjs";
 // @ts-expect-error plain JavaScript module
-import { fixtureStoreFetcher } from "../../../server/retailers/cli.mjs";
+import { connectorsFor, fixtureStoreFetcher } from "../../../server/retailers/cli.mjs";
 // @ts-expect-error plain JavaScript module
 import { importRetailer, placeItem, retailerIdFor } from "../../../server/retailers/import.mjs";
 
@@ -56,6 +56,28 @@ describe("the connector contract, met by both connectors", async () => {
       });
     });
   }
+});
+
+describe("a CSV store's id", () => {
+  it("comes from --store, not the file name, so a retailer's next file updates the same store", async () => {
+    const [nov] = await connectorsFor({ csv: "exports/catalogue-nov.csv", store: "harbour-and-hide" });
+    const [dec] = await connectorsFor({ csv: "/elsewhere/catalogue-dec.csv", store: "harbour-and-hide" });
+    expect(nov.id).toBe("csv:harbour-and-hide");
+    expect(retailerIdFor(dec.id)).toBe(retailerIdFor(nov.id));
+  });
+  it("keeps two retailers apart even when their files have the same name", async () => {
+    const [a] = await connectorsFor({ csv: "a/products.csv", store: "store-a" });
+    const [b] = await connectorsFor({ csv: "b/products.csv", store: "store-b" });
+    expect(retailerIdFor(a.id)).not.toBe(retailerIdFor(b.id));
+  });
+  it("is required, and must be lower-case letters, digits and dashes", async () => {
+    await expect(connectorsFor({ csv: "products.csv" })).rejects.toThrow(/--store/);
+    for (const bad of ["Harbour", "harbour hide", "harbour--hide", "-x", "x".repeat(61)]) await expect(connectorsFor({ csv: "p.csv", store: bad })).rejects.toThrow(/--store must be/);
+  });
+  it("leaves the fixture stores where they were", async () => {
+    const ids = (await connectorsFor({ fixtures: true })).map((c) => c.id);
+    expect(ids).toEqual(["shopify:test-tailors.praxis-test.example", "csv:sample", "csv:library"]);
+  });
 });
 
 describe("the contract check", () => {

@@ -2,7 +2,9 @@
  * Imports a retailer's catalogue into the database (DATABASE_URL) and prints the report.
  *
  *   npm run retailers:import -- --shopify www.example.com [--name "Example"] [--currency USD]
- *   npm run retailers:import -- --csv path/to/catalogue.csv [--name "Example"]
+ *   npm run retailers:import -- --csv path/to/catalogue.csv --store harbour-and-hide [--name "Example"]
+ *     --store is the retailer's own id, kept for every file they send: the same --store updates the same
+ *     store whatever the file is called, and two retailers' files never share one.
  *   npm run retailers:import -- --fixtures        the test store, the sample CSV and the library pieces, no network (npm run db:seed)
  *   add --report out.json to keep the full report as JSON
  *
@@ -28,6 +30,13 @@ export async function fixtureStoreFetcher() {
   };
 }
 
+/** A CSV store's id from --store: lower-case letters, digits and dashes, so a typo can't make a near-duplicate. */
+export function csvStoreId(store) {
+  if (!store) throw new Error("Say which store the file is for: --store <id>, for example --store harbour-and-hide. Use the same id every time that retailer sends a file.");
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(store) || store.length > 60) throw new Error(`--store must be lower-case letters, digits and dashes (got "${store}").`);
+  return `csv:${store}`;
+}
+
 export async function connectorsFor(values) {
   if (values.fixtures) {
     return [
@@ -38,7 +47,7 @@ export async function connectorsFor(values) {
     ];
   }
   if (values.shopify) return [createShopifyConnector({ store: values.shopify, name: values.name ?? null, currency: values.currency ?? "USD" })];
-  if (values.csv) return [createCsvConnector({ path: values.csv, name: values.name ?? null })];
+  if (values.csv) return [createCsvConnector({ path: values.csv, name: values.name ?? null, id: csvStoreId(values.store) })];
   throw new Error("Say what to import: --shopify <store>, --csv <file> or --fixtures.");
 }
 
@@ -47,6 +56,7 @@ async function main() {
     options: {
       shopify: { type: "string" },
       csv: { type: "string" },
+      store: { type: "string" },
       fixtures: { type: "boolean" },
       name: { type: "string" },
       currency: { type: "string" },
