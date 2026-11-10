@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { track } from "../../core/analytics";
+import { AUTH_MODE } from "../../core/config";
 import { FRESH, readSession, useJourney, writeSession } from "../lib/journeyContext";
 import type { SavedLook } from "../../shared/store";
 import { LinkButton, PrimaryButton, TextButton } from "../ui/controls";
@@ -59,7 +60,7 @@ export function Looks() {
           <div className="px-5 pt-6 lg:px-12 lg:pt-8">
             <h1 className="a-display">Saved looks</h1>
             <p className="a-saved-where mt-1 text-[13px] leading-5 text-[var(--muted)]">
-              {user ? "Kept under your name in this browser on this device." : "Kept in this browser on this device. No account needed."}
+              {user && AUTH_MODE === "magic-link" ? "Kept with your account, on every device you sign in on." : user ? "Kept under your name in this browser on this device." : "Kept in this browser on this device. No account needed."}
             </p>
           </div>
         ) : null}

@@ -94,6 +94,7 @@ try {
   const userId = await p.evaluate(() => JSON.parse(localStorage.getItem("praxis_lab_a_user") ?? "{}").id);
   check(/^user_[0-9a-f]{32}$/.test(userId ?? ""), `the page is signed in as the server's account (${userId})`);
   check((await cards(p)) === 1, "after signing up, the guest's look is still there");
+  check((await p.getByText("Kept with your account, on every device you sign in on.").count()) === 1, "Saved looks says the looks are kept with the account");
   await p.waitForTimeout(1000);
   const server1 = await p.evaluate(async () => (await (await fetch("/api/looks", { credentials: "include" })).json()).looks.length);
   check(server1 === 1, `the look is kept with the account on the server (${server1})`);
