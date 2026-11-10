@@ -5,6 +5,8 @@
  */
 import { ACCOUNT_CONSENTS } from "../shared/consents.mjs";
 import type { SavedLook } from "../shared/store";
+import type { OutfitFeedback } from "./contracts";
+import type { WardrobeEntry } from "./data";
 import { apiUrl } from "./config";
 
 export interface AccountUser {
@@ -53,6 +55,14 @@ export interface AccountConsent {
 }
 export const listAccountConsents = () => call<{ consents: AccountConsent[] }>("/api/account/consents");
 export const withdrawAccountConsents = () => post<{ withdrawn: string[]; signedOut: number }>("/api/account/consents/withdraw", {});
+const put = <T>(path: string, body: unknown) => call<T>(path, { method: "PUT", body: JSON.stringify(body) });
+const del = <T>(path: string, body: unknown) => call<T>(path, { method: "DELETE", body: JSON.stringify(body) });
+export const accountWardrobe = () => call<{ items: WardrobeEntry[] }>("/api/wardrobe");
+export const putAccountWardrobe = (anonymousSessionId: string, item: WardrobeEntry) => put<{ saved: boolean }>("/api/wardrobe", { anonymousSessionId, item });
+export const removeAccountWardrobe = (wardrobeItemId: string) => del<{ removed: boolean }>("/api/wardrobe", { wardrobeItemId });
+export const accountFeedback = () => call<{ records: OutfitFeedback[] }>("/api/feedback");
+export const putAccountFeedback = (anonymousSessionId: string, record: OutfitFeedback) => put<{ saved: boolean }>("/api/feedback", { anonymousSessionId, record });
+export const removeAccountFeedback = (eventId: string) => del<{ removed: boolean }>("/api/feedback", { eventId });
 export const accountLooks = () => call<{ looks: SavedLook[] }>("/api/looks");
 export const removeAccountLook = (dedupeKey: string) => call<{ removed: boolean }>("/api/looks", { method: "DELETE", body: JSON.stringify({ dedupeKey }) });
 /** The server sends at most this many looks; a list this long may be cut short. */

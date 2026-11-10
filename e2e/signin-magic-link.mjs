@@ -2,7 +2,8 @@
  * The real sign-in, end to end in Chromium (AUTH_MODE "magic-link"): a guest saves a look, signs up by
  * emailed link, and still sees it; on a second device the same address signs in and sees it too; the
  * look is kept once on the server; a used link is refused; removing it on one device removes it on both;
- * withdrawing the agreement from Your data signs the account out everywhere.
+ * wardrobe pieces and feedback follow the account; withdrawing the agreement from Your data signs the
+ * account out everywhere.
  *
  *   VITE_AUTH=magic-link npm run build
  *   DATABASE_URL=... REDIS_URL=... node e2e/signin-magic-link.mjs
@@ -136,6 +137,44 @@ try {
   await p.goto(`${BASE}/looks?mode=light`);
   await p.waitForTimeout(1500);
   check((await cards(p)) === 0, "the first device drops the look removed on the second");
+
+  // Wardrobe pieces and feedback follow the account too.
+  const rows = (page) => page.getByRole("list", { name: "Pieces you own" }).locator(":scope > li");
+  const wardrobe = async (page) => {
+    await page.goto(`${BASE}/wardrobe?mode=light`);
+    await page.waitForTimeout(1500);
+    return rows(page).count();
+  };
+  await wardrobe(p);
+  await p.getByRole("button", { name: "Add a piece" }).click();
+  const form = p.getByRole("region", { name: "Add a piece" });
+  await form.getByRole("radio", { name: "Top" }).click();
+  await form.getByLabel("What you call it").fill("Linen overshirt");
+  await form.getByRole("button", { name: "Add to my wardrobe" }).click();
+  await p.waitForTimeout(400);
+  await p.goto(`${BASE}/looks?mode=light`); // a change of screen sends it
+  await p.waitForTimeout(1500);
+  const serverPieces = (page) => page.evaluate(async () => (await (await fetch("/api/wardrobe", { credentials: "include" })).json()).items.map((i) => i.label));
+  check(JSON.stringify(await serverPieces(p)) === JSON.stringify(["Linen overshirt"]), "a piece added on one device is kept with the account");
+  check((await wardrobe(q)) === 1 && (await q.getByText("Linen overshirt").count()) > 0, "the other device's wardrobe shows it");
+  await q.getByRole("button", { name: "Remove Linen overshirt" }).click();
+  await q.waitForTimeout(300);
+  await q.goto(`${BASE}/looks?mode=light`);
+  await q.waitForTimeout(1500);
+  check((await serverPieces(q)).length === 0, "removing it on the other device removes it from the account");
+  check((await wardrobe(p)) === 0, "and from the first device's wardrobe");
+
+  await p.goto(RESULTS);
+  await p.getByRole("button", { name: "More like this" }).filter({ visible: true }).first().click({ timeout: 30_000 });
+  await p.waitForTimeout(300);
+  await p.goto(`${BASE}/looks?mode=light`);
+  await p.waitForTimeout(1500);
+  const serverWords = await p.evaluate(async () => (await (await fetch("/api/feedback", { credentials: "include" })).json()).records.map((r) => r.feedback));
+  check(JSON.stringify(serverWords) === JSON.stringify(["more_like_this"]), `feedback on a look is kept with the account (${serverWords.join(", ")})`);
+  await q.goto(`${BASE}/looks?mode=light`);
+  await q.waitForTimeout(1500);
+  const onTwo = await q.evaluate(() => JSON.parse(localStorage.getItem("praxis_feedback") ?? "[]").filter((r) => r.userId).map((r) => r.feedback));
+  check(JSON.stringify(onTwo) === JSON.stringify(["more_like_this"]), `the other device has the feedback too (${onTwo.join(", ")})`);
 
   // Withdrawing the agreement from Your data signs the account out on both devices.
   await q.goto(`${BASE}/data?mode=light`);

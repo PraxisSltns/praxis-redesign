@@ -21,6 +21,7 @@ import { AUTH_MODE } from "../../core/config";
 import { ACCOUNT_LOOKS_PAGE, accountLooks, claimGuestLooks, removeAccountLook, saveAccountLook, signOutAccount } from "../../core/accountApi";
 import { visibleTo } from "../../core/account";
 import type { SavedLook } from "../../shared/store";
+import { syncAccountRecords } from "../../core/accountRecords";
 
 /** What a tab holds for the person using it, cleared at sign out. */
 const SIGN_OUT_TAB_KEYS = ["praxis_lab_a_face", "praxis_lab_a_item", "praxis_dna_draft", "praxis_lab_a_removed", "praxis_tryon_photo", "praxis_tryon_request"];
@@ -181,6 +182,15 @@ export function JourneyProvider({ children }: { children: ReactNode }) {
       live = false;
     };
   }, [accountId, syncWithAccount, signOut]);
+
+  /* The account's wardrobe and feedback: synced on each load and each change of screen (src/core/accountRecords.ts). */
+  const { pathname: screen } = useLocation();
+  useEffect(() => {
+    if (!accountId) return;
+    void syncAccountRecords(accountId, anonymousId()).then((r) => {
+      if (r === "signed_out") signOut();
+    });
+  }, [accountId, screen, signOut]);
   const { pathname } = useLocation();
   const gateActions = useRef<Partial<Record<GateKind, () => void>>>({});
 

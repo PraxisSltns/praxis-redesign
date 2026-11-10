@@ -12,6 +12,9 @@
  *   GET    /api/account/consents           -> { consents: [{ category, version, grantedAt, withdrawnAt }] }
  *   POST   /api/account/consents/withdraw  -> { withdrawn: [category], signedOut: n } withdraws them all and
  *                                             ends every session of the account; signing in asks again
+ *   GET    /api/wardrobe        -> { items }      PUT { anonymousSessionId, item }    DELETE { wardrobeItemId }
+ *   GET    /api/feedback        -> { records }    PUT { anonymousSessionId, record }  DELETE { eventId }
+ *                                  (server/auth/records.mjs; the page's three-way sync, src/core/accountSync.ts)
  *   DELETE /api/looks           { dedupeKey }  -> { removed } removes the account's look with that key; already gone is 200 too
  *
  * Changes are accepted only from this app's own pages: a POST or DELETE must carry an Origin of
@@ -23,11 +26,12 @@ import { allowedOrigins } from "../cors.mjs";
 import { db } from "../db.mjs";
 import { readBody } from "../tryon.mjs";
 import { createAccounts } from "./account.mjs";
+import { createRecords } from "./records.mjs";
 import { AuthError } from "./magic-link.mjs";
 import { appOrigin, authProvider } from "./provider.mjs";
 import { cookieHeader, createSessions, SESSION_DAYS } from "./sessions.mjs";
 
-const PATHS = /^\/api\/(auth\/(start|verify|me|sign-out)|account\/(claim|consents|consents\/withdraw)|looks(\/slook_[0-9a-f]{24})?)$/;
+const PATHS = /^\/api\/(auth\/(start|verify|me|sign-out)|account\/(claim|consents|consents\/withdraw)|looks(\/slook_[0-9a-f]{24})?|wardrobe|feedback)$/;
 export const isAccountPath = (pathname) => PATHS.test(pathname);
 
 function reply(res, status, payload, headers = {}) {
@@ -61,8 +65,9 @@ export async function handleAccount(req, res, pathname, { pool = db(), provider 
     if (!pool) throw new AuthError(503, "not_available", "Accounts aren't set up on this server.");
     const sessions = createSessions(pool);
     const accounts = createAccounts(pool);
+    const records = createRecords(pool);
     const secure = appOrigin(env).startsWith("https://");
-    const changing = req.method === "POST" || req.method === "DELETE";
+    const changing = req.method === "POST" || req.method === "PUT" || req.method === "DELETE";
     if (changing && !trustedOrigin(req, env)) throw new AuthError(403, "bad_origin", "This request didn't come from Praxis.");
 
     if (pathname === "/api/auth/start" && req.method === "POST") {
@@ -95,6 +100,13 @@ export async function handleAccount(req, res, pathname, { pool = db(), provider 
       const withdrawn = await accounts.withdrawConsents(user);
       const signedOut = await sessions.endAll(user.id);
       return reply(res, 200, { withdrawn, signedOut }, { "Set-Cookie": cookieHeader("", { secure, maxAge: 0 }) });
+    }
+    if (pathname === "/api/wardrobe" || pathname === "/api/feedback") {
+      const wardrobe = pathname === "/api/wardrobe";
+      if (req.method === "GET") return reply(res, 200, wardrobe ? { items: await records.wardrobe(user) } : { records: await records.feedback(user) });
+      const body = await json(req);
+      if (req.method === "PUT") return reply(res, 200, wardrobe ? await records.putWardrobe(user, body?.anonymousSessionId, body?.item) : await records.putFeedback(user, body?.anonymousSessionId, body?.record));
+      if (req.method === "DELETE") return reply(res, 200, wardrobe ? await records.removeWardrobe(user, body?.wardrobeItemId) : await records.removeFeedback(user, body?.eventId));
     }
     if (pathname === "/api/looks" && req.method === "GET") return reply(res, 200, { looks: await accounts.looks(user) });
     if (pathname === "/api/looks" && req.method === "POST") {

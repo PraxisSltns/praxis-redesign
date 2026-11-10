@@ -1,5 +1,5 @@
 -- Pieces the customer owns (docs/data-schemas.md 9.2: wardrobe_items; src/core/data.ts WardrobeEntry).
--- Ids are random (wardrobe_...), so the id alone is the key. Photos are not stored: they stay in the tab.
+-- Photos are not stored: they stay in the tab. The key became (owner_user_id, wardrobe_item_id) in 1762200000600.
 
 -- Up Migration
 CREATE TABLE wardrobe_items (

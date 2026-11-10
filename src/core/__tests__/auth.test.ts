@@ -204,6 +204,38 @@ describe.skipIf(!ready)("signing in, over HTTP", async () => {
     expect((await call("/api/account/consents")).status).toBe(401);
   });
 
+  it("keeps the account's wardrobe pieces and feedback, and one account's never mixes with another's", async () => {
+    const signInAs = async (who: string, anonymous: string) => {
+      await call("/api/auth/start", { method: "POST", body: { email: who, anonymousSessionId: anonymous, consents } });
+      return (await call("/api/auth/verify", { method: "POST", body: { token: linkToken() } })).cookie!.split(";")[0];
+    };
+    const a = await signInAs(`wardrobe.a.${stamp}@praxis-test.example`, `anon_wa${stamp}`);
+    const b = await signInAs(`wardrobe.b.${stamp}@praxis-test.example`, `anon_wb${stamp}`);
+    // The same sample piece has the same id for everyone.
+    const piece = { wardrobeItemId: "wardrobe_top_abc123", slot: "top", label: "Navy blazer", source: "sample", addedAt: "2026-11-11T09:00:00.000Z" };
+    expect((await call("/api/wardrobe", { method: "PUT", cookie: a, body: { anonymousSessionId: `anon_wa${stamp}`, item: piece } })).body).toEqual({ saved: true });
+    expect((await call("/api/wardrobe", { method: "PUT", cookie: b, body: { anonymousSessionId: `anon_wb${stamp}`, item: { ...piece, label: "My blazer" } } })).body).toEqual({ saved: true });
+    await call("/api/wardrobe", { method: "PUT", cookie: a, body: { anonymousSessionId: `anon_wa${stamp}`, item: { ...piece, colour: "navy", updatedAt: "2026-11-11T10:00:00.000Z" } } });
+    const mine = (await call("/api/wardrobe", { cookie: a })).body.items;
+    expect(mine).toEqual([expect.objectContaining({ wardrobeItemId: piece.wardrobeItemId, label: "Navy blazer", colour: "navy", updatedAt: "2026-11-11T10:00:00.000Z" })]);
+    expect((await call("/api/wardrobe", { cookie: b })).body.items.map((x: { label: string }) => x.label)).toEqual(["My blazer"]);
+    expect((await call("/api/wardrobe", { method: "PUT", cookie: a, body: { anonymousSessionId: "anon_x", item: { ...piece, slot: "hat" } } })).status).toBe(400);
+    expect((await call("/api/wardrobe", { method: "DELETE", cookie: a, body: { wardrobeItemId: piece.wardrobeItemId } })).body).toEqual({ removed: true });
+    expect((await call("/api/wardrobe", { cookie: a })).body.items).toEqual([]);
+    expect((await call("/api/wardrobe", { cookie: b })).body.items).toHaveLength(1);
+
+    const word = { eventId: `fb_${stamp}`, anonymousSessionId: `anon_wa${stamp}`, recommendationId: "rec_1", requestId: "req_1", outfitId: "dinner_sharper_01", feedback: "not_for_me", reason: "too_formal", adapter: { id: "mock", version: "1" }, createdAt: "2026-11-11T09:30:00.000Z" };
+    expect((await call("/api/feedback", { method: "PUT", cookie: a, body: { anonymousSessionId: `anon_wa${stamp}`, record: word } })).body).toEqual({ saved: true });
+    expect((await call("/api/feedback", { method: "PUT", cookie: a, body: { anonymousSessionId: `anon_wa${stamp}`, record: word } })).body).toEqual({ saved: true });
+    expect((await call("/api/feedback", { cookie: a })).body.records).toEqual([expect.objectContaining({ eventId: word.eventId, feedback: "not_for_me", reason: "too_formal", adapter: { id: "mock", version: "1" } })]);
+    expect((await call("/api/feedback", { method: "PUT", cookie: b, body: { anonymousSessionId: `anon_wb${stamp}`, record: word } })).status).toBe(409);
+    expect((await call("/api/feedback", { method: "PUT", cookie: a, body: { anonymousSessionId: "anon_x", record: { ...word, eventId: "fb_2", feedback: "meh" } } })).status).toBe(400);
+    expect((await call("/api/feedback", { method: "DELETE", cookie: b, body: { eventId: word.eventId } })).body).toEqual({ removed: false });
+    expect((await call("/api/feedback", { method: "DELETE", cookie: a, body: { eventId: word.eventId } })).body).toEqual({ removed: true });
+    expect((await call("/api/wardrobe")).status).toBe(401);
+    expect((await call("/api/feedback", { method: "PUT", cookie: a, origin: "https://elsewhere.example", body: { record: word } })).status).toBe(403);
+  });
+
   it("limits how many links one address can ask for", async () => {
     const busy = `busy.${stamp}@praxis-test.example`;
     const statuses = [];
