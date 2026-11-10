@@ -76,7 +76,7 @@ Replace `OWNER/REPO` with `PraxisSltns/praxis-redesign`.
    JSON
    ```
 
-6. The merge token. Create a fine-grained personal access token (GitHub > Settings > Developer settings > Fine-grained tokens) owned by a person who can merge into `main`. Give it **only this repository**, with permissions **Contents: Read and write** and **Pull requests: Read and write**, and an expiry date you'll remember to renew. Then:
+6. The merge token. Create a fine-grained personal access token (GitHub > Settings > Developer settings > Fine-grained tokens) owned by a person who can merge into `main`. Set **Resource owner** to the organisation (`PraxisSltns`), not the person's own account: a token owned by the person can't act on an organisation's repository, and the merge fails with `Resource not accessible by personal access token (mergePullRequest)`. If the organisation requires approval for fine-grained tokens, an owner approves it under Organization settings > Personal access tokens. Give it **only this repository**, with permissions **Contents: Read and write** and **Pull requests: Read and write**, and an expiry date you'll remember to renew. Then:
 
    ```bash
    gh secret set MERGE_TOKEN --repo OWNER/REPO   # paste the token when asked
