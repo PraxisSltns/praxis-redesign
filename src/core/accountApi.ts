@@ -45,6 +45,14 @@ export const startSignIn = (email: string, anonymousSessionId: string) => post<{
 export const verifySignIn = (token: string) => post<{ user: AccountUser; isNew: boolean; anonymousSessionId: string }>("/api/auth/verify", { token });
 export const signOutAccount = () => post<{ signedOut: true }>("/api/auth/sign-out", {});
 export const claimGuestLooks = (anonymousSessionId: string, looks: SavedLook[]) => post<{ moved: number; duplicates: number; rejected: number; already: boolean }>("/api/account/claim", { anonymousSessionId, looks });
+export interface AccountConsent {
+  category: string;
+  version: string;
+  grantedAt: string;
+  withdrawnAt: string | null;
+}
+export const listAccountConsents = () => call<{ consents: AccountConsent[] }>("/api/account/consents");
+export const withdrawAccountConsents = () => post<{ withdrawn: string[]; signedOut: number }>("/api/account/consents/withdraw", {});
 export const accountLooks = () => call<{ looks: SavedLook[] }>("/api/looks");
 export const removeAccountLook = (dedupeKey: string) => call<{ removed: boolean }>("/api/looks", { method: "DELETE", body: JSON.stringify({ dedupeKey }) });
 /** The server sends at most this many looks; a list this long may be cut short. */

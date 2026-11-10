@@ -96,18 +96,7 @@ export function JourneyProvider({ children }: { children: ReactNode }) {
   /* Records past their retention period go before any screen reads them (the stores cache what they read). */
   useState(() => pruneExpired());
 
-  /* With a real account, each page load brings in the account's looks saved on other devices (or lost to a reload mid sign-in). */
   const accountId = AUTH_MODE === "magic-link" ? user?.id : undefined;
-  useEffect(() => {
-    if (!accountId) return;
-    let live = true;
-    void accountLooks().then((mine) => {
-      if (live && mine.ok) syncWithAccount(accountId, mine.looks);
-    });
-    return () => {
-      live = false;
-    };
-  }, [accountId, syncWithAccount]);
 
   /* A visit is counted once per tab; a browser that has been here before counts as returning. */
   useEffect(() => {
@@ -176,6 +165,22 @@ export function JourneyProvider({ children }: { children: ReactNode }) {
     userSignOut();
     track("signed_out", {});
   }, [userSignOut]);
+
+  /* With a real account, each page load syncs the account's looks with this device. If the server says
+     the session has ended (signed out elsewhere, consent withdrawn, or past its 30 days), this device
+     signs out too, rather than looking signed in while nothing reaches the account. */
+  useEffect(() => {
+    if (!accountId) return;
+    let live = true;
+    void accountLooks().then((mine) => {
+      if (!live) return;
+      if (mine.ok) syncWithAccount(accountId, mine.looks);
+      else if (mine.status === 401) signOut();
+    });
+    return () => {
+      live = false;
+    };
+  }, [accountId, syncWithAccount, signOut]);
   const { pathname } = useLocation();
   const gateActions = useRef<Partial<Record<GateKind, () => void>>>({});
 

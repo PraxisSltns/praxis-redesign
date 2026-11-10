@@ -9,6 +9,9 @@
  *   GET    /api/looks           -> { looks } (signed in)
  *   POST   /api/looks           { anonymousSessionId, look }  -> saves one (signed in)
  *   DELETE /api/looks/<id>      -> removes one (signed in)
+ *   GET    /api/account/consents           -> { consents: [{ category, version, grantedAt, withdrawnAt }] }
+ *   POST   /api/account/consents/withdraw  -> { withdrawn: [category], signedOut: n } withdraws them all and
+ *                                             ends every session of the account; signing in asks again
  *   DELETE /api/looks           { dedupeKey }  -> { removed } removes the account's look with that key; already gone is 200 too
  *
  * Changes are accepted only from this app's own pages: a POST or DELETE must carry an Origin of
@@ -24,7 +27,7 @@ import { AuthError } from "./magic-link.mjs";
 import { appOrigin, authProvider } from "./provider.mjs";
 import { cookieHeader, createSessions, SESSION_DAYS } from "./sessions.mjs";
 
-const PATHS = /^\/api\/(auth\/(start|verify|me|sign-out)|account\/claim|looks(\/slook_[0-9a-f]{24})?)$/;
+const PATHS = /^\/api\/(auth\/(start|verify|me|sign-out)|account\/(claim|consents|consents\/withdraw)|looks(\/slook_[0-9a-f]{24})?)$/;
 export const isAccountPath = (pathname) => PATHS.test(pathname);
 
 function reply(res, status, payload, headers = {}) {
@@ -86,6 +89,12 @@ export async function handleAccount(req, res, pathname, { pool = db(), provider 
     if (pathname === "/api/account/claim" && req.method === "POST") {
       const body = await json(req);
       return reply(res, 200, await accounts.claim(user, body?.anonymousSessionId, body?.looks));
+    }
+    if (pathname === "/api/account/consents" && req.method === "GET") return reply(res, 200, { consents: await accounts.consents(user) });
+    if (pathname === "/api/account/consents/withdraw" && req.method === "POST") {
+      const withdrawn = await accounts.withdrawConsents(user);
+      const signedOut = await sessions.endAll(user.id);
+      return reply(res, 200, { withdrawn, signedOut }, { "Set-Cookie": cookieHeader("", { secure, maxAge: 0 }) });
     }
     if (pathname === "/api/looks" && req.method === "GET") return reply(res, 200, { looks: await accounts.looks(user) });
     if (pathname === "/api/looks" && req.method === "POST") {

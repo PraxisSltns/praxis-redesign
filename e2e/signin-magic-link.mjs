@@ -1,7 +1,8 @@
 /**
  * The real sign-in, end to end in Chromium (AUTH_MODE "magic-link"): a guest saves a look, signs up by
  * emailed link, and still sees it; on a second device the same address signs in and sees it too; the
- * look is kept once on the server; a used link is refused; removing it on one device removes it on both.
+ * look is kept once on the server; a used link is refused; removing it on one device removes it on both;
+ * withdrawing the agreement from Your data signs the account out everywhere.
  *
  *   VITE_AUTH=magic-link npm run build
  *   DATABASE_URL=... REDIS_URL=... node e2e/signin-magic-link.mjs
@@ -135,6 +136,20 @@ try {
   await p.waitForTimeout(1500);
   check((await cards(p)) === 0, "the first device drops the look removed on the second");
 
+  // Withdrawing the agreement from Your data signs the account out on both devices.
+  await q.goto(`${BASE}/data?mode=light`);
+  const agreed = await q.waitForFunction(() => [...document.querySelectorAll("[role=listitem]")].filter((e) => /Agreed /.test(e.textContent ?? "")).length === 2, null, { timeout: 10_000 }).then(() => true, () => false);
+  check(agreed, `Your data shows the two agreements with their dates${agreed ? "" : ` (saw: ${(await q.locator("section[aria-labelledby=account-consents]").innerText().catch(() => "no section")).replace(/\s+/g, " ")})`}`);
+  await q.getByRole("button", { name: "Withdraw my agreement" }).click();
+  await q.getByRole("button", { name: "Withdraw and sign out" }).click();
+  await q.waitForURL((u) => new URL(u).pathname === "/", { timeout: 10_000 });
+  const me = (page) => page.evaluate(async () => (await fetch("/api/auth/me", { credentials: "include" })).status);
+  check((await me(q)) === 401 && (await me(p)) === 401, "withdrawing signs the account out on this device and the other one");
+  check((await q.getByText("Sign in", { exact: true }).count()) > 0, "the page shows the person as signed out");
+  await p.goto(`${BASE}/looks?mode=light`);
+  await p.waitForTimeout(1500);
+  check((await p.getByText("Sign in", { exact: true }).count()) > 0, "the other device shows itself signed out on its next load");
+
   const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await db.connect();
   const { rows } = await db.query(
@@ -147,6 +162,8 @@ try {
   check(rows[0]?.looks === 0, `the server no longer holds the removed look (${rows[0]?.looks})`);
   check(rows[0]?.claims === 2, `each device's guest data was handed over once (${rows[0]?.claims} claims)`);
   check(rows[0]?.consents === "privacy privacy-draft-2026-11, terms terms-draft-2026-11", `sign-up recorded the consents (${rows[0]?.consents})`);
+  const w = await db.query("SELECT count(*)::int AS n, count(c.withdrawn_at)::int AS withdrawn FROM consents c JOIN users u ON u.user_id = c.owner_user_id WHERE u.email = $1", [EMAIL]);
+  check(w.rows[0].n === 2 && w.rows[0].withdrawn === 2, `the withdrawal is recorded, with the agreements kept as history (${w.rows[0].withdrawn} of ${w.rows[0].n} withdrawn)`);
   await db.query("DELETE FROM users WHERE email = $1", [EMAIL]);
   await db.end();
   await browser.close();

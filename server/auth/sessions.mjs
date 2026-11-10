@@ -53,5 +53,10 @@ export function createSessions(pool, { now = () => new Date() } = {}) {
       const token = tokenFrom(req);
       if (token) await pool.query("UPDATE sessions SET revoked_at = $2 WHERE session_hash = $1 AND revoked_at IS NULL", [sha256(token), now()]);
     },
+    /** Ends every session an account has, on every device. Returns how many. */
+    async endAll(userId) {
+      const { rowCount } = await pool.query("UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL", [userId, now()]);
+      return rowCount;
+    },
   };
 }
