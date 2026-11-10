@@ -7,7 +7,12 @@
  * The query is embedded by the ai service (Marqo-FashionSigLIP, the same space as the products' cut-outs),
  * then pgvector ranks live, slotted, in-stock products by cosine distance on the HNSW index. Each item
  * carries its cut-out's address on this server (GET /api/cutouts/...), which streams it from the bucket.
+ *
+ * When the words name a kind of piece ("navy blazer", "brown leather belt", by the shared ontology) and no
+ * slot is given, the search keeps to that kind's slot and puts the closest of that exact kind first; only if the slot has
+ * too few pieces does it fill up with the nearest others. The answer says what it understood (query.kind).
  */
+import { classify } from "../src/shared/ontology.mjs";
 import { createAiService, toVector } from "./ai-service.mjs";
 import { db } from "./db.mjs";
 import { storage } from "./storage.mjs";
@@ -43,7 +48,7 @@ export async function nearest(pool, vector, { slot = null, size = null, limit = 
     await client.query("SET LOCAL hnsw.iterative_scan = relaxed_order");
     const { rows } = await client.query(
       `SELECT p.product_id, p.title, p.brand, p.slot, p.layer, p.subcategory, p.colour, p.price_amount, p.currency,
-              p.product_url, p.images->>0 AS image, p.cutout_url, r.name AS retailer,
+              p.product_url, p.images->>0 AS image, p.cutout_url, r.name AS retailer, p.retailer_id, p.description,
               1 - (p.embedding <=> $1::vector) AS score,
               (SELECT array_agg(v.size ORDER BY v.size) FROM product_variants v WHERE v.product_id = p.product_id AND v.available AND v.size IS NOT NULL) AS sizes
        FROM products p JOIN retailers r USING (retailer_id)
@@ -63,6 +68,21 @@ export async function nearest(pool, vector, { slot = null, size = null, limit = 
   } finally {
     client.release();
   }
+}
+
+/**
+ * The nearest pieces in the kind's slot: the closest of that exact kind first, then the rest by closeness
+ * (so "navy blazer" can show a navy suit jacket before a charcoal blazer). Filled up from other slots only
+ * when the slot runs out.
+ */
+export async function withinKind(pool, vector, kind, query) {
+  const inSlot = await nearest(pool, vector, { ...query, slot: kind.slot });
+  const best = inSlot.find((r) => r.subcategory === kind.subcategory);
+  const ordered = best ? [best, ...inSlot.filter((r) => r !== best)] : inSlot;
+  if (ordered.length >= query.limit) return ordered.slice(0, query.limit);
+  const seen = new Set(ordered.map((r) => r.product_id));
+  const others = (await nearest(pool, vector, { ...query, slot: null, limit: query.limit + ordered.length })).filter((r) => !seen.has(r.product_id));
+  return [...ordered, ...others].slice(0, query.limit);
 }
 
 export const cutoutPath = (key) => `/api/cutouts/${key.replace(/^cutouts\//, "")}`;
@@ -105,9 +125,10 @@ export async function search(body, { pool = db(), ai = createAiService(), retail
   }
   const embedMs = Date.now() - embedStarted;
   const searchStarted = Date.now();
-  const rows = await nearest(pool, vectors[0], { ...query, retailerId });
+  const kind = query.text && !query.slot ? classify(query.text) : null;
+  const rows = kind ? await withinKind(pool, vectors[0], kind, { ...query, retailerId }) : await nearest(pool, vectors[0], { ...query, retailerId });
   return {
-    query: { ...(query.text ? { text: query.text } : { image: true }), slot: query.slot, size: query.size, limit: query.limit },
+    query: { ...(query.text ? { text: query.text } : { image: true }), slot: query.slot, size: query.size, limit: query.limit, ...(kind ? { kind: { slot: kind.slot, subcategory: kind.subcategory } } : {}) },
     items: rows.map(toItem),
     ms: { embed: embedMs, search: Date.now() - searchStarted, total: Date.now() - started },
   };
