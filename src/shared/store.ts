@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Look } from "./catalog";
-import { migrateLooks, visibleTo, type Owner } from "../core/account";
+import { migrateLooks, reconcileAccountLooks, visibleTo, type Owner, type PendingRemoval } from "../core/account";
 import { anonymousId } from "../core/identity";
 import { fromLegacy, isProfile, type LegacyDna, type StyleProfile } from "../core/styleProfile";
 
@@ -29,6 +29,8 @@ export interface SavedLook {
   owner?: Owner;
   /** The same look for the same brief has the same key; used to keep one copy at sign-in. */
   dedupeKey: string;
+  /** With a real account: the server is known to hold this look (src/core/account.ts reconcileAccountLooks). */
+  synced?: boolean;
 }
 
 /** A Style DNA profile and who it belongs to. Never holds a photo. */
@@ -44,9 +46,13 @@ interface LabState {
   looks: SavedLook[];
   /** Style DNA profiles (src/core/styleProfile.ts), one per person at most. */
   profiles: OwnedProfile[];
+  /** Account looks removed here whose removal hasn't reached the server yet. */
+  pendingRemovals?: PendingRemoval[];
 }
 
 const EMPTY: LabState = { version: STORE_VERSION, looks: [], profiles: [] };
+
+const isPending = (p: unknown): p is PendingRemoval => !!p && typeof (p as PendingRemoval).userId === "string" && typeof (p as PendingRemoval).dedupeKey === "string";
 
 function keyFor(concept: string): string {
   return `praxis_lab_${concept}`;
@@ -104,7 +110,7 @@ export function readState(concept: string): LabState | null {
     return null;
   }
   if (!raw) return EMPTY;
-  let parsed: { looks?: unknown; dna?: unknown; profiles?: unknown };
+  let parsed: { looks?: unknown; dna?: unknown; profiles?: unknown; pendingRemovals?: unknown };
   try {
     parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") throw new Error("not an object");
@@ -136,7 +142,8 @@ export function readState(concept: string): LabState | null {
     const profile = readDna(parsed.dna);
     if (profile) profiles.push({ profile });
   }
-  return { version: STORE_VERSION, looks, profiles };
+  const pendingRemovals = Array.isArray(parsed.pendingRemovals) ? parsed.pendingRemovals.filter(isPending) : [];
+  return { version: STORE_VERSION, looks, profiles, ...(pendingRemovals.length ? { pendingRemovals } : {}) };
 }
 
 function write(concept: string, state: LabState): boolean {
@@ -265,12 +272,12 @@ export function useLabStore(concept: string, userId?: string) {
     [update],
   );
 
-  /** Puts a removed look back where it was, newest first. */
+  /** Puts a removed look back where it was, newest first. The server's copy is gone, so it isn't synced. */
   const restoreLook = useCallback(
     (entry: SavedLook) =>
       update((prev) => ({
         ...prev,
-        looks: [...prev.looks.filter((l) => l.id !== entry.id), entry].sort((a, b) => b.savedAt.localeCompare(a.savedAt)),
+        looks: [...prev.looks.filter((l) => l.id !== entry.id), { ...entry, synced: false }].sort((a, b) => b.savedAt.localeCompare(a.savedAt)),
       })),
     [update],
   );
@@ -304,20 +311,40 @@ export function useLabStore(concept: string, userId?: string) {
   );
 
   /**
-   * Adds the account's looks from the server (a real sign-in) that this browser doesn't have, matched
-   * by dedupe key, so a look saved on another device shows here and none shows twice.
+   * Brings this browser's copy of the account's looks in line with the server's (a real sign-in): looks
+   * saved on another device arrive, looks removed on another device go, and what this browser hasn't
+   * sent yet is returned for the caller to send (src/core/account.ts reconcileAccountLooks).
    */
-  const mergeAccountLooks = useCallback(
-    (accountId: string, incoming: SavedLook[]) => {
-      let added = 0;
+  const syncAccountLooks = useCallback(
+    (accountId: string, incoming: SavedLook[], complete: boolean) => {
+      let result: { added: number; dropped: number; toSave: SavedLook[]; toRemove: string[] } = { added: 0, dropped: 0, toSave: [], toRemove: [] };
       const ok = update((prev) => {
-        const have = new Set(prev.looks.filter((l) => l.owner?.userId === accountId).map((l) => l.dedupeKey));
-        const fresh = incoming.filter((l) => l && typeof l.dedupeKey === "string" && !have.has(l.dedupeKey)).map((l) => ({ ...l, owner: { anonymousSessionId: l.owner?.anonymousSessionId ?? anonymousId(), userId: accountId } }));
-        added = fresh.length;
-        return fresh.length ? { ...prev, looks: [...prev.looks, ...fresh].sort((a, b) => b.savedAt.localeCompare(a.savedAt)) } : prev;
+        const r = reconcileAccountLooks(prev.looks, prev.pendingRemovals ?? [], accountId, incoming, { complete, anonymousSessionId: anonymousId() });
+        result = r;
+        return { ...prev, looks: r.looks };
       });
-      return { ok, added };
+      return { ok, ...result };
     },
+    [update],
+  );
+
+  /** Notes that the server now holds this look. */
+  const markSynced = useCallback(
+    (accountId: string, dedupeKey: string) =>
+      update((prev) => ({ ...prev, looks: prev.looks.map((l) => (l.owner?.userId === accountId && l.dedupeKey === dedupeKey && !l.synced ? { ...l, synced: true } : l)) })),
+    [update],
+  );
+
+  /** Keeps (or forgets) a removal the server hasn't heard about yet, so the look doesn't come back. */
+  const notePendingRemoval = useCallback(
+    (accountId: string, dedupeKey: string, pending: boolean) =>
+      update((prev) => {
+        const rest = (prev.pendingRemovals ?? []).filter((p) => !(p.userId === accountId && p.dedupeKey === dedupeKey));
+        const next = pending ? [...rest, { userId: accountId, dedupeKey }] : rest;
+        const { pendingRemovals: _old, ...base } = prev;
+        void _old;
+        return next.length ? { ...base, pendingRemovals: next } : base;
+      }),
     [update],
   );
 
@@ -348,5 +375,5 @@ export function useLabStore(concept: string, userId?: string) {
   const looks = useMemo(() => state.looks.filter((l) => visibleTo(l, userId, anon)), [state.looks, userId, anon]);
   const dna = useMemo(() => profileFor(state.profiles, userId, anon)?.profile ?? null, [state.profiles, userId, anon]);
 
-  return { looks, dna, saveLook, removeLook, restoreLook, migrateToAccount, mergeAccountLooks, saveDna, clearDna, reset };
+  return { looks, dna, saveLook, removeLook, restoreLook, migrateToAccount, syncAccountLooks, markSynced, notePendingRemoval, saveDna, clearDna, reset };
 }

@@ -120,5 +120,12 @@ export function createAccounts(pool) {
       const { rowCount } = await pool.query("DELETE FROM saved_looks WHERE owner_user_id = $1 AND saved_look_id = $2", [user.id, id]);
       return rowCount === 1;
     },
+
+    /** Removes the account's look with this dedupe key. Already gone counts as done, so the page can retry. */
+    async removeByKey(user, dedupeKey) {
+      if (!text(dedupeKey, 600)) throw Object.assign(new Error("Send the look's dedupeKey."), { status: 400 });
+      const { rowCount } = await pool.query("DELETE FROM saved_looks WHERE owner_user_id = $1 AND dedupe_key = $2", [user.id, dedupeKey]);
+      return { removed: rowCount > 0 };
+    },
   };
 }

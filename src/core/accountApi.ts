@@ -15,10 +15,17 @@ export interface AccountUser {
 
 type Answer<T> = ({ ok: true } & T) | { ok: false; status: number; error: string };
 
+/** Browsers finish a keepalive request after the page moves on, for bodies up to 64 KB. */
+const KEEPALIVE_MAX = 60_000;
+
 async function call<T>(path: string, init: RequestInit = {}): Promise<Answer<T>> {
   try {
+    // A write is often followed at once by a change of page (sign-in returning, Remove going back to
+    // Looks), which would cancel it. Small ones survive that; anything lost is sent again by the next sync.
+    const keepalive = typeof init.body === "string" && init.body.length <= KEEPALIVE_MAX;
     const res = await fetch(apiUrl(path), {
       ...init,
+      keepalive,
       credentials: "include",
       headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), Accept: "application/json" },
     });
@@ -39,4 +46,7 @@ export const verifySignIn = (token: string) => post<{ user: AccountUser; isNew: 
 export const signOutAccount = () => post<{ signedOut: true }>("/api/auth/sign-out", {});
 export const claimGuestLooks = (anonymousSessionId: string, looks: SavedLook[]) => post<{ moved: number; duplicates: number; rejected: number; already: boolean }>("/api/account/claim", { anonymousSessionId, looks });
 export const accountLooks = () => call<{ looks: SavedLook[] }>("/api/looks");
+export const removeAccountLook = (dedupeKey: string) => call<{ removed: boolean }>("/api/looks", { method: "DELETE", body: JSON.stringify({ dedupeKey }) });
+/** The server sends at most this many looks; a list this long may be cut short. */
+export const ACCOUNT_LOOKS_PAGE = 500;
 export const saveAccountLook = (anonymousSessionId: string, look: SavedLook) => post<{ saved: boolean; duplicate: boolean; id: string }>("/api/looks", { anonymousSessionId, look });

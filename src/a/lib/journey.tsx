@@ -18,8 +18,9 @@ import { session } from "../../core/ids";
 import { withdrawConsent, type ImageCategory } from "../../core/images";
 import { PROVIDER_ADDRESS } from "./user";
 import { AUTH_MODE } from "../../core/config";
-import { accountLooks, claimGuestLooks, saveAccountLook, signOutAccount } from "../../core/accountApi";
+import { ACCOUNT_LOOKS_PAGE, accountLooks, claimGuestLooks, removeAccountLook, saveAccountLook, signOutAccount } from "../../core/accountApi";
 import { visibleTo } from "../../core/account";
+import type { SavedLook } from "../../shared/store";
 
 /** What a tab holds for the person using it, cleared at sign out. */
 const SIGN_OUT_TAB_KEYS = ["praxis_lab_a_face", "praxis_lab_a_item", "praxis_dna_draft", "praxis_lab_a_removed", "praxis_tryon_photo", "praxis_tryon_request"];
@@ -32,19 +33,65 @@ export function JourneyProvider({ children }: { children: ReactNode }) {
   const { mode, setMode } = useMode();
   const { user, signIn: userSignIn, signOut: userSignOut, grantPremium } = useUser();
   const labStore = useLabStore("a", user?.id);
-  const { migrateToAccount, mergeAccountLooks } = labStore;
-  /* With a real account, a look saved here is also kept on the server (a failure leaves it on this device). */
+  const { migrateToAccount, syncAccountLooks, markSynced, notePendingRemoval } = labStore;
+
+  /* With a real account, the server keeps the account's looks. Each send that fails stays noted on this
+     device (unsynced, or a pending removal) and is sent again on the next sync. */
+  const sendLook = useCallback(
+    (accountId: string, entry: SavedLook) =>
+      void saveAccountLook(anonymousId(), entry).then((r) => {
+        if (r.ok) markSynced(accountId, entry.dedupeKey);
+        else track("account_migration_failed", { part: "looks" });
+      }),
+    [markSynced],
+  );
+  const sendRemoval = useCallback(
+    (accountId: string, dedupeKey: string) =>
+      void removeAccountLook(dedupeKey).then((r) => {
+        if (r.ok) notePendingRemoval(accountId, dedupeKey, false);
+      }),
+    [notePendingRemoval],
+  );
+  /** Brings in the account's looks from other devices, drops the ones removed there, and sends what this device owes. */
+  const syncWithAccount = useCallback(
+    (accountId: string, mine: SavedLook[]) => {
+      const r = syncAccountLooks(accountId, mine, mine.length < ACCOUNT_LOOKS_PAGE);
+      if (!r.ok) return;
+      for (const l of r.toSave) sendLook(accountId, l);
+      for (const key of r.toRemove) sendRemoval(accountId, key);
+    },
+    [syncAccountLooks, sendLook, sendRemoval],
+  );
+
   const store = useMemo(() => {
     if (AUTH_MODE !== "magic-link" || !user) return labStore;
+    const accountId = user.id;
     return {
       ...labStore,
       saveLook: (...args: Parameters<typeof labStore.saveLook>) => {
         const result = labStore.saveLook(...args);
-        if (result.ok && !result.existing) void saveAccountLook(anonymousId(), result.entry).then((r) => (r.ok ? undefined : track("account_migration_failed", { part: "looks" })));
+        if (result.ok && !result.existing) sendLook(accountId, result.entry);
         return result;
       },
+      removeLook: (id: string) => {
+        const entry = labStore.looks.find((l) => l.id === id);
+        const ok = labStore.removeLook(id);
+        if (ok && entry?.owner?.userId === accountId) {
+          notePendingRemoval(accountId, entry.dedupeKey, true);
+          sendRemoval(accountId, entry.dedupeKey);
+        }
+        return ok;
+      },
+      restoreLook: (entry: SavedLook) => {
+        const ok = labStore.restoreLook(entry);
+        if (ok && entry.owner?.userId === accountId) {
+          notePendingRemoval(accountId, entry.dedupeKey, false);
+          sendLook(accountId, entry);
+        }
+        return ok;
+      },
     };
-  }, [labStore, user]);
+  }, [labStore, user, sendLook, sendRemoval, notePendingRemoval]);
 
   /* Records past their retention period go before any screen reads them (the stores cache what they read). */
   useState(() => pruneExpired());
@@ -55,12 +102,12 @@ export function JourneyProvider({ children }: { children: ReactNode }) {
     if (!accountId) return;
     let live = true;
     void accountLooks().then((mine) => {
-      if (live && mine.ok) mergeAccountLooks(accountId, mine.looks);
+      if (live && mine.ok) syncWithAccount(accountId, mine.looks);
     });
     return () => {
       live = false;
     };
-  }, [accountId, mergeAccountLooks]);
+  }, [accountId, syncWithAccount]);
 
   /* A visit is counted once per tab; a browser that has been here before counts as returning. */
   useEffect(() => {
@@ -96,11 +143,11 @@ export function JourneyProvider({ children }: { children: ReactNode }) {
             return accountLooks();
           })
           .then((mine) => {
-            if (mine.ok) mergeAccountLooks(account.id, mine.looks);
+            if (mine.ok) syncWithAccount(account.id, mine.looks);
           });
       }
     },
-    [userSignIn, migrateToAccount, mergeAccountLooks, labStore.looks],
+    [userSignIn, migrateToAccount, syncWithAccount, labStore.looks],
   );
   const [faceImage, setFace] = useState<string | null>(() => readSession<string>(FACE_KEY));
   const [ownedItem, setItem] = useState<OwnedItem | null>(() => readSession<OwnedItem>(ITEM_KEY));

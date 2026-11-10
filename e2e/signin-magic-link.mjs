@@ -1,7 +1,7 @@
 /**
  * The real sign-in, end to end in Chromium (AUTH_MODE "magic-link"): a guest saves a look, signs up by
  * emailed link, and still sees it; on a second device the same address signs in and sees it too; the
- * look is kept once on the server; a used link is refused.
+ * look is kept once on the server; a used link is refused; removing it on one device removes it on both.
  *
  *   VITE_AUTH=magic-link npm run build
  *   DATABASE_URL=... REDIS_URL=... node e2e/signin-magic-link.mjs
@@ -113,6 +113,28 @@ try {
   await signIn(q, EMAIL);
   check((await cards(q)) === 1, "on a second device, the same account sees the look");
 
+  // Removing on one device removes it everywhere: device two removes it, device one loses it on its next load.
+  const serverLooks = (page) => page.evaluate(async () => (await (await fetch("/api/looks", { credentials: "include" })).json()).looks.length);
+  await q.locator("a.a-rail-card").first().click();
+  await q.waitForURL(/\/looks\/.+/);
+  await q.getByRole("button", { name: "Remove" }).filter({ visible: true }).first().click();
+  await q.waitForURL(/\/looks(\?|$)/);
+  await q.getByRole("button", { name: "Undo" }).click();
+  await q.waitForTimeout(1000);
+  check((await cards(q)) === 1 && (await serverLooks(q)) === 1, "Undo on the second device puts the look back here and on the account");
+  await q.locator("a.a-rail-card").first().click();
+  await q.waitForURL(/\/looks\/.+/);
+  await q.getByRole("button", { name: "Remove" }).filter({ visible: true }).first().click();
+  await q.waitForURL(/\/looks(\?|$)/);
+  await q.waitForTimeout(1000);
+  check((await serverLooks(q)) === 0, "removing the look on the second device removes it from the account");
+  await q.reload();
+  await q.waitForTimeout(1500);
+  check((await cards(q)) === 0, "after a reload, the removed look stays gone on the second device");
+  await p.goto(`${BASE}/looks?mode=light`);
+  await p.waitForTimeout(1500);
+  check((await cards(p)) === 0, "the first device drops the look removed on the second");
+
   const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await db.connect();
   const { rows } = await db.query(
@@ -122,7 +144,7 @@ try {
      FROM users u WHERE u.email = $1`,
     [EMAIL],
   );
-  check(rows[0]?.looks === 1, `the server holds the look once (${rows[0]?.looks})`);
+  check(rows[0]?.looks === 0, `the server no longer holds the removed look (${rows[0]?.looks})`);
   check(rows[0]?.claims === 2, `each device's guest data was handed over once (${rows[0]?.claims} claims)`);
   check(rows[0]?.consents === "privacy privacy-draft-2026-11, terms terms-draft-2026-11", `sign-up recorded the consents (${rows[0]?.consents})`);
   await db.query("DELETE FROM users WHERE email = $1", [EMAIL]);

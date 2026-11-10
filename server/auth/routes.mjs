@@ -9,6 +9,7 @@
  *   GET    /api/looks           -> { looks } (signed in)
  *   POST   /api/looks           { anonymousSessionId, look }  -> saves one (signed in)
  *   DELETE /api/looks/<id>      -> removes one (signed in)
+ *   DELETE /api/looks           { dedupeKey }  -> { removed } removes the account's look with that key; already gone is 200 too
  *
  * Changes are accepted only from this app's own pages: a POST or DELETE must carry an Origin of
  * APP_ORIGIN or one in CORS_ORIGINS. With SameSite=Lax cookies, that stops other sites acting for a
@@ -90,6 +91,10 @@ export async function handleAccount(req, res, pathname, { pool = db(), provider 
     if (pathname === "/api/looks" && req.method === "POST") {
       const body = await json(req);
       return reply(res, 200, await accounts.save(user, body?.anonymousSessionId, body?.look));
+    }
+    if (pathname === "/api/looks" && req.method === "DELETE") {
+      const body = await json(req);
+      return reply(res, 200, await accounts.removeByKey(user, body?.dedupeKey));
     }
     if (pathname.startsWith("/api/looks/") && req.method === "DELETE") {
       return reply(res, (await accounts.remove(user, pathname.slice("/api/looks/".length))) ? 200 : 404, {});

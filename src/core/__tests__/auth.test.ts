@@ -164,6 +164,18 @@ describe.skipIf(!ready)("signing in, over HTTP", async () => {
     expect((await call("/api/looks", { cookie: "praxis_session=" + "x".repeat(43) })).status).toBe(401);
   });
 
+  it("removes a look by its key, from any device, and a second remove is still fine", async () => {
+    const l = look("wedding_relaxed_01");
+    await call("/api/looks", { method: "POST", cookie, body: { anonymousSessionId: anon, look: l } });
+    const keys = async () => (await call("/api/looks", { cookie })).body.looks.map((x: { dedupeKey: string }) => x.dedupeKey);
+    expect(await keys()).toContain(l.dedupeKey);
+    expect((await call("/api/looks", { method: "DELETE", cookie, body: { dedupeKey: l.dedupeKey } })).body).toEqual({ removed: true });
+    expect(await keys()).not.toContain(l.dedupeKey);
+    expect((await call("/api/looks", { method: "DELETE", cookie, body: { dedupeKey: l.dedupeKey } }))).toMatchObject({ status: 200, body: { removed: false } });
+    expect((await call("/api/looks", { method: "DELETE", cookie, body: {} })).status).toBe(400);
+    expect((await call("/api/looks", { method: "DELETE", body: { dedupeKey: l.dedupeKey } })).status).toBe(401);
+  });
+
   it("limits how many links one address can ask for", async () => {
     const busy = `busy.${stamp}@praxis-test.example`;
     const statuses = [];
