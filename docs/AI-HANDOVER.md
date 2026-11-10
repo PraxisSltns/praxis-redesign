@@ -267,6 +267,12 @@ Everything else runs on a free, deterministic mock. `/api/health` reports `provi
 - `RETAIL_SHOPIFY_NAME` overrides the store name shown on pieces.
 - The list is read whole on the server and kept for 30 minutes; nothing about the customer reaches the store. Results then say the pieces are real and the photos show the look, not these exact pieces.
 
+**Imported catalogue (free, Week 2):** `server/providers/catalogue.mjs` matches each part of a look to the pieces imported into Postgres (`npm run retailers:import`, then `npm run catalogue:process` for cut-outs and vectors).
+- Each part's words are embedded by the ai service, and pgvector returns the nearest live, in-stock pieces in its slot. Then the same kind rules as the test store apply: same layer, and same kind or a close stand-in.
+- Each piece's picture is its cut-out on this server (`/api/cutouts/...`).
+- `AI_PROVIDER_PRODUCT_MATCHING=catalogue` switches it on, in place of the test store. It needs `DATABASE_URL` and `AI_SERVICE_URL`.
+- `CATALOGUE_MATCHING_FOR=test` (default): only a tab opened with `?stock=live` uses it. `everyone`: every visitor, once the retailers have agreed.
+
 **Request schema:**
 - Matching: `{ garments: [{ garmentId, slot, name }], budget, currency, country? }`
 - Inventory: `{ products: [{ productId, retailerId }] }`
