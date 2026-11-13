@@ -129,4 +129,4 @@ Still needed from people: the staging spend approval, a merge token owned by `Pr
 
 ## Phase 5: staging
 
-Not started. It waits on the written spend approval, as in Week 1. Everything it needs is in `docs/deploy/railway.md`, plus `AI_PROVIDER_PRODUCT_MATCHING=catalogue` and a Railway cron service for `npm run catalogue:process`.
+Unblocked on 2026-11-13: Sami confirmed Tarek's approval of the staging spend on Railway, the sender address `no-reply@trypraxis.ai`, and approval of the organisation-owned merge token. The first retailer and the legal text are paused, so staging keeps `CATALOGUE_MATCHING_FOR=test` and the draft consent versions. Everything it needs is in `docs/deploy/railway.md`, plus `AI_PROVIDER_PRODUCT_MATCHING=catalogue` and a Railway cron service for `npm run catalogue:process`.
