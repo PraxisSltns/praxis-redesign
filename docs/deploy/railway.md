@@ -73,7 +73,7 @@ The project already has a service whose public address is `praxis-redesign-produ
 
 The page signs people in for real only when it's built with `VITE_AUTH=magic-link` (`src/core/config.ts`). Until then the sign-in screens are the preview, as on the existing service. The page is served by the gateway itself, on one address, so the session cookie is first-party and the staging app already talks to the staging gateway. `VITE_API_BASE_URL` stays unset.
 
-1. **Mail.** In Resend, verify a sending domain, then on the gateway set `RESEND_API_KEY` and `MAIL_FROM` (for example `Praxis <signin@mail.praxis.example>`). Without them, a production server answers that sign-in isn't available. It never pretends to send.
+1. **Mail.** In Resend, verify the domain `trypraxis.ai` (Resend lists the DNS records to add at the domain's DNS host), then on the gateway set `RESEND_API_KEY` and `MAIL_FROM=Praxis <no-reply@trypraxis.ai>` (the sender Praxis chose, 2026-11-13). Without them, a production server answers that sign-in isn't available. It never pretends to send.
 2. **Address.** On the gateway, set `APP_ORIGIN` to the staging address (`https://<staging domain>`). Links point there, and changing requests must come from it.
 3. **Build.** On the gateway, set the variable `VITE_AUTH=magic-link`. The Dockerfile declares it as a build argument, so Railway passes it into `npm run build`. Redeploy.
 4. **Check.** `curl -X POST https://<staging domain>/api/auth/start -H 'Origin: https://<staging domain>' -H 'Content-Type: application/json' -d '{"email":"you@example.com","anonymousSessionId":"anon_check12345","consents":[{"category":"terms","version":"terms-draft-2026-11"},{"category":"privacy","version":"privacy-draft-2026-11"}]}'` answers 202, and the email arrives.

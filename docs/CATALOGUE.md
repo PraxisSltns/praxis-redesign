@@ -277,7 +277,7 @@ connector (server/retailers/shopify.mjs or csv.mjs)  ->  normalised items (serve
 
 ```bash
 npm run retailers:import -- --shopify www.example.com [--name "Example"] [--currency USD]
-npm run retailers:import -- --csv path/to/catalogue.csv [--name "Example"]
+npm run retailers:import -- --csv path/to/catalogue.csv --store harbour-and-hide [--name "Example"]
 npm run db:seed          # the e2e test store and server/retailers/fixtures/sample.csv, no network
 # add --report out.json to keep the full report
 ```

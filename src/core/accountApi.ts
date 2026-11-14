@@ -5,6 +5,8 @@
  */
 import { ACCOUNT_CONSENTS } from "../shared/consents.mjs";
 import type { SavedLook } from "../shared/store";
+import type { OutfitFeedback } from "./contracts";
+import type { WardrobeEntry } from "./data";
 import { apiUrl } from "./config";
 
 export interface AccountUser {
@@ -15,10 +17,17 @@ export interface AccountUser {
 
 type Answer<T> = ({ ok: true } & T) | { ok: false; status: number; error: string };
 
+/** Browsers finish a keepalive request after the page moves on, for bodies up to 64 KB. */
+const KEEPALIVE_MAX = 60_000;
+
 async function call<T>(path: string, init: RequestInit = {}): Promise<Answer<T>> {
   try {
+    // A write is often followed at once by a change of page (sign-in returning, Remove going back to
+    // Looks), which would cancel it. Small ones survive that; anything lost is sent again by the next sync.
+    const keepalive = typeof init.body === "string" && init.body.length <= KEEPALIVE_MAX;
     const res = await fetch(apiUrl(path), {
       ...init,
+      keepalive,
       credentials: "include",
       headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), Accept: "application/json" },
     });
@@ -38,5 +47,24 @@ export const startSignIn = (email: string, anonymousSessionId: string) => post<{
 export const verifySignIn = (token: string) => post<{ user: AccountUser; isNew: boolean; anonymousSessionId: string }>("/api/auth/verify", { token });
 export const signOutAccount = () => post<{ signedOut: true }>("/api/auth/sign-out", {});
 export const claimGuestLooks = (anonymousSessionId: string, looks: SavedLook[]) => post<{ moved: number; duplicates: number; rejected: number; already: boolean }>("/api/account/claim", { anonymousSessionId, looks });
+export interface AccountConsent {
+  category: string;
+  version: string;
+  grantedAt: string;
+  withdrawnAt: string | null;
+}
+export const listAccountConsents = () => call<{ consents: AccountConsent[] }>("/api/account/consents");
+export const withdrawAccountConsents = () => post<{ withdrawn: string[]; signedOut: number }>("/api/account/consents/withdraw", {});
+const put = <T>(path: string, body: unknown) => call<T>(path, { method: "PUT", body: JSON.stringify(body) });
+const del = <T>(path: string, body: unknown) => call<T>(path, { method: "DELETE", body: JSON.stringify(body) });
+export const accountWardrobe = () => call<{ items: WardrobeEntry[] }>("/api/wardrobe");
+export const putAccountWardrobe = (anonymousSessionId: string, item: WardrobeEntry) => put<{ saved: boolean }>("/api/wardrobe", { anonymousSessionId, item });
+export const removeAccountWardrobe = (wardrobeItemId: string) => del<{ removed: boolean }>("/api/wardrobe", { wardrobeItemId });
+export const accountFeedback = () => call<{ records: OutfitFeedback[] }>("/api/feedback");
+export const putAccountFeedback = (anonymousSessionId: string, record: OutfitFeedback) => put<{ saved: boolean }>("/api/feedback", { anonymousSessionId, record });
+export const removeAccountFeedback = (eventId: string) => del<{ removed: boolean }>("/api/feedback", { eventId });
 export const accountLooks = () => call<{ looks: SavedLook[] }>("/api/looks");
+export const removeAccountLook = (dedupeKey: string) => call<{ removed: boolean }>("/api/looks", { method: "DELETE", body: JSON.stringify({ dedupeKey }) });
+/** The server sends at most this many looks; a list this long may be cut short. */
+export const ACCOUNT_LOOKS_PAGE = 500;
 export const saveAccountLook = (anonymousSessionId: string, look: SavedLook) => post<{ saved: boolean; duplicate: boolean; id: string }>("/api/looks", { anonymousSessionId, look });

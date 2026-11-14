@@ -4,7 +4,8 @@
  * (here when the looks are open, or from Make it yours on the results). A photo's main colour is read
  * on the device to fill in the colour; the customer says what the piece is, and can change the colour.
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { RECORDS_SYNCED } from "../../core/accountRecords";
 import { track } from "../../core/analytics";
 import { visibleTo } from "../../core/account";
 import { forgetWardrobeItem, rememberWardrobeItem, setWardrobePhoto, updateWardrobeItem, wardrobeEntries, wardrobePhoto, type WardrobeEntry } from "../../core/data";
@@ -156,6 +157,12 @@ export function Wardrobe() {
   const { href, go, user, answers, setOwnedItem } = useJourney();
   const anon = anonymousId();
   const [version, setVersion] = useState(0);
+  /* A sync with the account brought pieces added, changed or removed on another device. */
+  useEffect(() => {
+    const onSynced = () => setVersion((v) => v + 1);
+    window.addEventListener(RECORDS_SYNCED, onSynced);
+    return () => window.removeEventListener(RECORDS_SYNCED, onSynced);
+  }, []);
   const pieces = useMemo(() => wardrobeEntries().filter((e) => visibleTo({ owner: e.owner }, user?.id, anon)), [version, user?.id, anon]);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);

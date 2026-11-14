@@ -161,6 +161,16 @@ describe.skipIf(!ready)("the batch job and search, on Postgres and Redis", async
     expect((await search({ text: "navy blazer", slot: "shoes" }, { pool, ai, retailerId })).items.map((i: { title: string }) => i.title)).toEqual(["White Leather Sneakers"]);
   });
 
+  it("keeps to the kind the words name: that slot first, other slots only to fill up", async () => {
+    // The stand-in vector for these words points at the sneakers, but the words name a blazer.
+    const out = await search({ text: "navy wool blazer, like a sneaker", limit: 2 }, { pool, ai, retailerId });
+    expect(out.query.kind).toEqual({ slot: "top", subcategory: "blazer" });
+    expect(out.items.map((i: { title: string }) => i.title)).toEqual(["Navy Wool Blazer", "White Leather Sneakers"]);
+    // No kind named, or a slot given: as before.
+    expect((await search({ text: "something smart for tonight", limit: 1 }, { pool, ai, retailerId })).query.kind).toBeUndefined();
+    expect((await search({ text: "navy wool blazer, like a sneaker", slot: "shoes" }, { pool, ai, retailerId })).items.map((i: { title: string }) => i.title)).toEqual(["White Leather Sneakers"]);
+  });
+
   it("drops a piece from search once it leaves the feed", async () => {
     await importRetailer(pool, createCsvConnector({ path: "job.csv", id, read: async () => CSV.split("\n").filter((l) => !l.startsWith("B,")).join("\n") }));
     expect((await search({ text: "white sneakers" }, { pool, ai, retailerId })).items.map((i: { title: string }) => i.title)).toEqual(["Navy Wool Blazer"]);

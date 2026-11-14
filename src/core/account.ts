@@ -17,6 +17,72 @@ export interface OwnedLook {
   owner?: Owner;
   /** Identifies the look for de-duplication: the outfit, the brief it answered and any owned piece. */
   dedupeKey: string;
+  /** With a real account: the server is known to hold this look (it came from there, or saving it there worked). */
+  synced?: boolean;
+}
+
+/** A look removed on this device whose removal hasn't reached the account yet. */
+export interface PendingRemoval {
+  userId: string;
+  dedupeKey: string;
+}
+
+export interface Reconciled<T> {
+  looks: T[];
+  /** On the account but not here: now here. */
+  added: number;
+  /** Here, known to the account, and gone from it: removed on another device, so removed here. */
+  dropped: number;
+  /** The account's looks here that never reached it: to save there. */
+  toSave: T[];
+  /** Removals still to send. */
+  toRemove: string[];
+}
+
+/**
+ * Brings this device's copy of an account's looks in line with the account's (a real sign-in). The
+ * account is the record, except for what this device knows the account hasn't heard yet: a look saved
+ * here that didn't reach it is kept and sent again, and a look removed here stays removed until the
+ * removal reaches it. `complete` is false when the account's list may be cut short; then nothing is
+ * dropped. Other people's records on this device are left alone.
+ */
+export function reconcileAccountLooks<T extends OwnedLook>(
+  local: readonly T[],
+  pending: readonly PendingRemoval[],
+  userId: string,
+  incoming: readonly T[],
+  { complete = true, anonymousSessionId }: { complete?: boolean; anonymousSessionId: string },
+): Reconciled<T> {
+  const removing = new Set(pending.filter((p) => p.userId === userId).map((p) => p.dedupeKey));
+  const onAccount = new Map(incoming.filter((l) => l && typeof l.dedupeKey === "string" && !removing.has(l.dedupeKey)).map((l) => [l.dedupeKey, l]));
+  const mine = (l: T) => l.owner?.userId === userId;
+  let dropped = 0;
+  const toSave: T[] = [];
+  const have = new Set<string>();
+  const kept: T[] = [];
+  for (const l of local) {
+    if (!mine(l)) {
+      kept.push(l);
+      continue;
+    }
+    if (onAccount.has(l.dedupeKey)) {
+      have.add(l.dedupeKey);
+      kept.push(l.synced ? l : { ...l, synced: true });
+    } else if (l.synced && complete) {
+      dropped += 1;
+    } else {
+      kept.push(l);
+      if (!l.synced) toSave.push(l);
+    }
+  }
+  const fresh = [...onAccount.values()].filter((l) => !have.has(l.dedupeKey)).map((l) => ({ ...l, synced: true, owner: { anonymousSessionId: l.owner?.anonymousSessionId ?? anonymousSessionId, userId } }));
+  return {
+    looks: [...kept, ...fresh].sort((a, b) => b.savedAt.localeCompare(a.savedAt)),
+    added: fresh.length,
+    dropped,
+    toSave,
+    toRemove: [...removing],
+  };
 }
 
 /**

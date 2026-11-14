@@ -11,6 +11,7 @@ import type { Availability, Layer, ProductRef, ReferenceImage, Slot } from "../c
 import type { ColourFamily, Fit, Formality, Season } from "../../shared/ontology.mjs";
 import { STANDS_IN_FOR, classify, colourOf, fitOf, materialOf, seasonsOf } from "../../shared/ontology.mjs";
 import { purchaseRoute } from "../validate";
+import { apiUrl } from "../config";
 
 export type { ColourFamily, Fit, Formality, Season };
 
@@ -72,6 +73,9 @@ const str = (v: unknown, max = 120): string | undefined => (typeof v === "string
  * currency, or nothing to say what it is. Read by the shared ontology when the feed didn't file it.
  * Links and photos are https only; stock stays as the store reported it.
  */
+/** A catalogue cut-out served by the gateway (server/search.mjs cutoutPath). */
+const CUTOUT_PATH = /^\/api\/cutouts\/prod_[0-9a-f]{24}\/[0-9a-f]{16}\.png$/;
+
 export function fromStoreProduct(p: StoreProduct): CatalogueGarment | null {
   if (!p || typeof p !== "object" || typeof p.productId !== "string" || typeof p.retailerId !== "string" || typeof p.retailerName !== "string") return null;
   if (typeof p.price !== "number" || !(p.price > 0) || p.currency !== "USD") return null;
@@ -87,7 +91,8 @@ export function fromStoreProduct(p: StoreProduct): CatalogueGarment | null {
   const colour = (FAMILIES.has(a.colour as string) ? a.colour : colourOf(name)) as ColourFamily | undefined;
   const material = str(a.material, 40) ?? materialOf(name);
   const photos = Array.isArray(p.photos) ? (p.photos as { src?: unknown }[]).map((x) => x?.src).filter((s): s is string => typeof s === "string" && /^https:\/\//i.test(s)) : [];
-  const imageUrl = photos[0] ?? (p.imageUrl && /^https:\/\//i.test(p.imageUrl) ? p.imageUrl : undefined);
+  // A store's own https photo, or a cut-out from our own catalogue on this server (/api/cutouts/...).
+  const imageUrl = photos[0] ?? (p.imageUrl && /^https:\/\//i.test(p.imageUrl) ? p.imageUrl : p.imageUrl && CUTOUT_PATH.test(p.imageUrl) ? apiUrl(p.imageUrl) : undefined);
   const product: ProductRef = {
     productId: p.productId,
     retailerId: p.retailerId,

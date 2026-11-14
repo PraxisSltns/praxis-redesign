@@ -95,6 +95,7 @@ export const EVENTS = {
   page_failed: { category: "engagement", trigger: "A page could not be drawn and the error page showed instead.", props: { kind: { type: "string", required: true } } },
   look_save_failed: { category: "engagement", trigger: "Saving a look could not be written to this browser (storage full or blocked). Nothing is shown as saved.", props: { recommendationId: REC, outfitId: { type: "string", required: true } } },
   account_migrated: { category: "account", trigger: "What a guest saved is moved to the account at sign-in.", props: { looks: { type: "number", required: true }, duplicates: { type: "number", required: true }, feedback: { type: "number", required: true }, wardrobe: { type: "number" } } },
+  account_consent_withdrawn: { category: "account", trigger: "A signed-in account withdraws its agreement to the terms and privacy notice from Your data; it is signed out on every device.", props: { count: { type: "number", required: true } } },
   account_migration_failed: { category: "account", trigger: "Moving a guest's looks or feedback to the account could not be written; what was not moved stays as it was.", props: { part: { type: "enum", values: ["looks", "feedback"], required: true } } },
 } as const satisfies Record<string, EventSpec>;
 

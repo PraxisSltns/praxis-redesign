@@ -120,5 +120,28 @@ export function createAccounts(pool) {
       const { rowCount } = await pool.query("DELETE FROM saved_looks WHERE owner_user_id = $1 AND saved_look_id = $2", [user.id, id]);
       return rowCount === 1;
     },
+
+    /** The account's consents: the newest record for each category, with when it was given and withdrawn. */
+    async consents(user) {
+      const { rows } = await pool.query(
+        `SELECT DISTINCT ON (category) category, version, granted_at, withdrawn_at
+         FROM consents WHERE owner_user_id = $1 ORDER BY category, granted_at DESC`,
+        [user.id],
+      );
+      return rows.map((r) => ({ category: r.category, version: r.version, grantedAt: r.granted_at.toISOString(), withdrawnAt: r.withdrawn_at?.toISOString() ?? null }));
+    },
+
+    /** Withdraws every consent the account holds now. The history stays; signing in again asks again. */
+    async withdrawConsents(user, at = new Date()) {
+      const { rows } = await pool.query("UPDATE consents SET withdrawn_at = $2 WHERE owner_user_id = $1 AND withdrawn_at IS NULL RETURNING category", [user.id, at]);
+      return rows.map((r) => r.category).sort();
+    },
+
+    /** Removes the account's look with this dedupe key. Already gone counts as done, so the page can retry. */
+    async removeByKey(user, dedupeKey) {
+      if (!text(dedupeKey, 600)) throw Object.assign(new Error("Send the look's dedupeKey."), { status: 400 });
+      const { rowCount } = await pool.query("DELETE FROM saved_looks WHERE owner_user_id = $1 AND dedupe_key = $2", [user.id, dedupeKey]);
+      return { removed: rowCount > 0 };
+    },
   };
 }
