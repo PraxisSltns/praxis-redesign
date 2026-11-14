@@ -43,6 +43,7 @@ The project already has a service whose public address is `praxis-redesign-produ
    ```
    DATABASE_URL=${{Postgres.DATABASE_URL}}
    REDIS_URL=${{Redis.REDIS_URL}}
+   REDIS_FAMILY=6
    S3_ENDPOINT=${{Bucket.<endpoint variable>}}
    S3_BUCKET=${{Bucket.<bucket name variable>}}
    S3_ACCESS_KEY_ID=${{Bucket.<access key variable>}}
