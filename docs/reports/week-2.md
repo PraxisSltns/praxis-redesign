@@ -129,4 +129,30 @@ Still needed from people: the staging spend approval, a merge token owned by `Pr
 
 ## Phase 5: staging
 
-Unblocked on 2026-11-13: Sami confirmed Tarek's approval of the staging spend on Railway, the sender address `no-reply@trypraxis.ai`, and approval of the organisation-owned merge token. The first retailer and the legal text are paused, so staging keeps `CATALOGUE_MATCHING_FOR=test` and the draft consent versions. Everything it needs is in `docs/deploy/railway.md`, plus `AI_PROVIDER_PRODUCT_MATCHING=catalogue` and a Railway cron service for `npm run catalogue:process`.
+Unblocked on 2026-11-13: Sami confirmed Tarek's approval of the staging spend on Railway, the sender address `no-reply@trypraxis.ai`, and approval of the organisation-owned merge token. The first retailer and the legal text are paused, so staging keeps `CATALOGUE_MATCHING_FOR=test` and the draft consent versions.
+
+### Built on 2026-11-14
+
+Environment `staging` in the Railway project `praxis-redesign` (workspace "Bob Wazneh's Projects"), EU West, next to the untouched `production`:
+
+| Service | What | State |
+|---|---|---|
+| `Postgres` | `pgvector/pgvector:0.8.0-pg16`, volume on its data folder | up; all 7 migrations ran as the gateway's pre-deploy step |
+| `Redis` | Railway's Redis | up |
+| bucket `praxis-staging` | Railway bucket, `ams` | up; keys held only in the gateway's variables |
+| `gateway` | the app, volume on `/data`, https://gateway-staging-e38e108b.up.railway.app | up; start `npm run start`, pre-deploy `npm run db:migrate`, health check `/api/health` |
+| `ai` | `services/ai`, private, 8 GB | up |
+| `catalogue-job` | for `npm run catalogue:process` nightly | created with its variables; offline until its start command and schedule are set |
+
+Health answers `ok` with the database, Redis and the ai service up. The test catalogues are imported (78 pieces), and the first processing run makes cut-outs and vectors at about 150 s a piece on the ai service's CPU (cut-out about 145 s, vector about 12 s).
+
+Found on the way:
+- Railway's Redis doesn't answer over IPv4 on the private network. `REDIS_FAMILY=6` makes the client use IPv6 (`4e2d5fe`).
+- The CLI's `railway environment edit` answered "No changes to apply" to every service setting (root directory, config file, branch, cron, Wait for CI), and the services didn't read `railway.json`. These were set in the dashboard.
+- The migration first went into the start command instead of the pre-deploy command: the tables were made, the app never started, and the health check failed the deploy. Corrected.
+- Railway stops reading `railway.json` on 2026-12-01; its replacement is `.railway/railway.ts` (`railway config migrate`). That file applies to the whole project, production included, so it waits for the owner's say.
+
+Still open:
+- Both app services deploy from `dev`, not `main`, without Wait for CI: Railway's GitHub access needs adding for the PraxisSltns organisation by its owner, then Branch `main` and Wait for CI on `gateway` and `ai`.
+- `catalogue-job`: start command `npm run catalogue:process`, cron `0 3 * * *`, restart policy Never (dashboard).
+- Email: Resend and the DNS records for `trypraxis.ai`; until then sign-in on staging is the preview. Everything it needs is in `docs/deploy/railway.md`, plus `AI_PROVIDER_PRODUCT_MATCHING=catalogue` and a Railway cron service for `npm run catalogue:process`.

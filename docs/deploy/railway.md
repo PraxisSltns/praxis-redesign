@@ -63,6 +63,14 @@ The project already has a service whose public address is `praxis-redesign-produ
    - Resources: the image is 3.8 GB (CPU-only PyTorch plus about 1.2 GB of weights). Give the service **at least 8 GB of memory**. With both models loaded it uses 2.4 GB, and a full-size cut-out needs more than another 1.4 GB: in a 3.8 GB Docker VM the container was killed for memory (`OOMKilled`) during its first cut-out (2026-11-04). Start-up takes about 17 s while the models load, inside the 120 s health check.
    - On the gateway, add `AI_SERVICE_URL=http://ai.railway.internal:8000`. Search (`/api/search`) and the batch job (`npm run catalogue:process`, from a Railway one-off command or a cron service) need it. `/api/health` then reports `"ai": "up"`. If it's down, health reports `"down"` but the gateway stays healthy.
 
+## Lessons from building staging (2026-11-14)
+
+- Dashboard edits are staged: nothing changes until **Deploy** (or a redeploy) picks them up.
+- **Pre-deploy command** and **Custom start command** are separate boxes. The migration goes in pre-deploy; the start command stays `npm run start`.
+- Set `REDIS_FAMILY=6` on every service that uses Redis: Railway's Redis answers only on the private network's IPv6 address.
+- `railway environment edit --service-config` didn't apply service settings (CLI 5.74), so set them in the dashboard.
+- Batch work runs over SSH: `railway ssh -s gateway -e staging -- 'cd /app && npm run db:seed'`.
+
 ## Checking a deploy
 
 - The deploy log shows the pre-deploy step (`npm run db:migrate`) before the health check.
