@@ -12,6 +12,9 @@ export function redisSettings(env = process.env) {
   return {
     url: (env.REDIS_URL ?? "").trim(),
     connectTimeout: n(env.REDIS_CONNECT_TIMEOUT_MS, 5_000),
+    // 6 on Railway: its Redis answers on the private network's IPv6 address only, and over IPv4 the
+    // connection gets no answer. Unset: Node picks.
+    ...(["4", "6"].includes((env.REDIS_FAMILY ?? "").trim()) ? { family: Number(env.REDIS_FAMILY.trim()) } : {}),
   };
 }
 
@@ -21,12 +24,12 @@ let connecting = null;
 /** The shared client, or null when REDIS_URL isn't set. */
 export function redis() {
   if (client) return client;
-  const { url, connectTimeout } = redisSettings();
+  const { url, connectTimeout, family } = redisSettings();
   if (!url) return null;
   client = createClient({
     url,
     disableOfflineQueue: true,
-    socket: { connectTimeout, reconnectStrategy: (retries) => Math.min(250 * 2 ** retries, 5_000) },
+    socket: { connectTimeout, ...(family ? { family } : {}), reconnectStrategy: (retries) => Math.min(250 * 2 ** retries, 5_000) },
   });
   // Without a listener a lost connection would crash the process; it reconnects on its own.
   let last = 0;

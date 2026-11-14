@@ -97,4 +97,10 @@ describe("client settings", () => {
     expect(s).toMatchObject({ connectionString: "postgres://x", max: 4, statement_timeout: 10_000, connectionTimeoutMillis: 5_000, idleTimeoutMillis: 30_000 });
     expect(redisSettings({ REDIS_URL: " redis://r:6379 ", REDIS_CONNECT_TIMEOUT_MS: "2500" })).toEqual({ url: "redis://r:6379", connectTimeout: 2500 });
   });
+
+  it("connects to Redis over IPv6 when REDIS_FAMILY is 6 (Railway's private network), and lets Node pick otherwise", () => {
+    expect(redisSettings({ REDIS_URL: "redis://r:6379", REDIS_FAMILY: "6" }).family).toBe(6);
+    expect(redisSettings({ REDIS_URL: "redis://r:6379", REDIS_FAMILY: "x" })).not.toHaveProperty("family");
+    expect(redisSettings({ REDIS_URL: "redis://r:6379" })).not.toHaveProperty("family");
+  });
 });
