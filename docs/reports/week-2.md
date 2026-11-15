@@ -146,7 +146,10 @@ Environment `staging` in the Railway project `praxis-redesign` (workspace "Bob W
 
 Health answers `ok` with the database, Redis and the ai service up. The test catalogues are imported (78 pieces), and the first processing run makes cut-outs and vectors at about 150 s a piece on the ai service's CPU (cut-out about 145 s, vector about 12 s).
 
+On 2026-11-15 the first run had finished: 73 of 75 with a cut-out and a vector (the 2 are the test store's missing photo, on purpose). Search on staging answers in about 0.05 s ("navy blazer" gives blazers, "brown leather belt" the belt first, "white sneakers" sneakers), and the Dinner look with `?stock=live` shows 4 catalogue pieces, each as its cut-out from the staging bucket, ready in 5.9 s.
+
 Found on the way:
+- The ai container sees the host's 48 CPUs but may use 8. PyTorch started 48 threads and was throttled: a text vector took 11 s and a cut-out 145 s. `TORCH_THREADS=8` and `OMP_NUM_THREADS=8` bring search to 0.05 s.
 - Railway's Redis doesn't answer over IPv4 on the private network. `REDIS_FAMILY=6` makes the client use IPv6 (`4e2d5fe`).
 - The CLI's `railway environment edit` answered "No changes to apply" to every service setting (root directory, config file, branch, cron, Wait for CI), and the services didn't read `railway.json`. These were set in the dashboard.
 - The migration first went into the start command instead of the pre-deploy command: the tables were made, the app never started, and the health check failed the deploy. Corrected.
