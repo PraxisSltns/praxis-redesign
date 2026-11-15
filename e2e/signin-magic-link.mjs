@@ -3,7 +3,7 @@
  * emailed link, and still sees it; on a second device the same address signs in and sees it too; the
  * look is kept once on the server; a used link is refused; removing it on one device removes it on both;
  * wardrobe pieces and feedback follow the account; withdrawing the agreement from Your data signs the
- * account out everywhere.
+ * account out everywhere; an account downloads its data and deletes itself, leaving nothing behind.
  *
  *   VITE_AUTH=magic-link npm run build
  *   DATABASE_URL=... REDIS_URL=... node e2e/signin-magic-link.mjs
@@ -12,6 +12,7 @@
  * (the local outbox, server/auth/mailer.mjs). Needs Postgres with the migrations, and Redis.
  */
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
@@ -205,6 +206,30 @@ try {
   const w = await db.query("SELECT count(*)::int AS n, count(c.withdrawn_at)::int AS withdrawn FROM consents c JOIN users u ON u.user_id = c.owner_user_id WHERE u.email = $1", [EMAIL]);
   check(w.rows[0].n === 2 && w.rows[0].withdrawn === 2, `the withdrawal is recorded, with the agreements kept as history (${w.rows[0].withdrawn} of ${w.rows[0].n} withdrawn)`);
   await db.query("DELETE FROM users WHERE email = $1", [EMAIL]);
+
+  // Download my data, then Delete my account, with a second account signed in on both devices.
+  const LEAVER = `signin.leaver.${Date.now()}@praxis-test.example`;
+  await signIn(q, LEAVER);
+  await q.goto(RESULTS);
+  await q.getByRole("button", { name: /^Save/ }).filter({ visible: true }).first().click({ timeout: 30_000 });
+  await q.waitForTimeout(1500);
+  await signIn(p, LEAVER);
+  await q.goto(`${BASE}/data?mode=light`);
+  const [file] = await Promise.all([q.waitForEvent("download", { timeout: 15_000 }), q.getByRole("button", { name: "Download my data" }).click()]);
+  const data = JSON.parse(readFileSync(await file.path(), "utf8"));
+  check(/^praxis-account-\d{4}-\d{2}-\d{2}\.json$/.test(file.suggestedFilename()), `Download my data saves a file (${file.suggestedFilename()})`);
+  check(data.account?.email === LEAVER && data.savedLooks?.length === 1 && data.consents?.length === 2 && data.sessions?.length === 2, `the file holds the account, its look, its agreements and both sessions (${data.savedLooks?.length} look, ${data.sessions?.length} sessions)`);
+  check(!/session_hash|token_hash|praxis_session/.test(JSON.stringify(data)), "the file holds no session or link token");
+  await q.getByRole("button", { name: "Delete my account" }).click();
+  await q.getByRole("button", { name: "Delete my account" }).click();
+  await q.waitForURL((u) => new URL(u).pathname === "/", { timeout: 10_000 });
+  check((await me(q)) === 401 && (await me(p)) === 401, "deleting signs the account out on this device and the other one");
+  check((await cards(q)) === 0, "this browser no longer holds the account's look");
+  const gone = await db.query(
+    `SELECT (SELECT count(*)::int FROM users WHERE email = $1) AS users, (SELECT count(*)::int FROM sign_in_links WHERE email = $1) AS links`,
+    [LEAVER],
+  );
+  check(gone.rows[0].users === 0 && gone.rows[0].links === 0, `the server keeps nothing of the account: no user, no sign-in links (${gone.rows[0].users} users, ${gone.rows[0].links} links)`);
   await db.end();
   await browser.close();
 } catch (e) {

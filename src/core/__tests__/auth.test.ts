@@ -236,6 +236,74 @@ describe.skipIf(!ready)("signing in, over HTTP", async () => {
     expect((await call("/api/feedback", { method: "PUT", cookie: a, origin: "https://elsewhere.example", body: { record: word } })).status).toBe(403);
   });
 
+  it("downloads everything the server keeps for the account, without a token, and only for that account", async () => {
+    const who = `export.${stamp}@praxis-test.example`;
+    const anonymous = `anon_export${stamp}`;
+    await call("/api/auth/start", { method: "POST", body: { email: who, anonymousSessionId: anonymous, consents } });
+    const me = (await call("/api/auth/verify", { method: "POST", body: { token: linkToken() } })).cookie!.split(";")[0];
+    await call("/api/looks", { method: "POST", cookie: me, body: { anonymousSessionId: anonymous, look: look("export_look_01") } });
+    await call("/api/wardrobe", { method: "PUT", cookie: me, body: { anonymousSessionId: anonymous, item: { wardrobeItemId: "wardrobe_top_exp1", slot: "top", label: "Grey knit", source: "described", addedAt: "2026-11-11T09:00:00.000Z" } } });
+    const res = await fetch(base + "/api/account/export", { headers: { Cookie: me } });
+    expect(res.headers.get("content-disposition")).toMatch(/^attachment; filename="praxis-account-\d{4}-\d{2}-\d{2}\.json"$/);
+    const data = await res.json();
+    expect(data.account).toMatchObject({ email: who, premium: false });
+    expect(data.consents.map((c: { category: string }) => c.category).sort()).toEqual(["privacy", "terms"]);
+    expect(data.sessions).toHaveLength(1);
+    expect(data.signInLinks).toHaveLength(1);
+    expect(data.savedLooks.map((l: { look: { id: string } }) => l.look.id)).toEqual(["export_look_01"]);
+    expect(data.wardrobe).toEqual([expect.objectContaining({ name: "Grey knit", slot: "top" })]);
+    const text = JSON.stringify(data);
+    expect(text).not.toMatch(/session_hash|token_hash|praxis_session/);
+    expect(text).not.toContain(email);
+    expect((await call("/api/account/export")).status).toBe(401);
+  });
+
+  it("deletes the account and everything kept with it, signs it out everywhere, and keeps nothing by default", async () => {
+    const who = `delete.${stamp}@praxis-test.example`;
+    const signInAs = async (anonymous: string) => {
+      await call("/api/auth/start", { method: "POST", body: { email: who, anonymousSessionId: anonymous, consents } });
+      return (await call("/api/auth/verify", { method: "POST", body: { token: linkToken() } })).cookie!.split(";")[0];
+    };
+    const phone = await signInAs(`anon_dphone${stamp}`);
+    const laptop = await signInAs(`anon_dlaptop${stamp}`);
+    await call("/api/looks", { method: "POST", cookie: phone, body: { anonymousSessionId: `anon_dphone${stamp}`, look: look("delete_look_01") } });
+    const id = (await call("/api/auth/me", { cookie: phone })).body.user.id;
+
+    expect((await call("/api/account/delete", { method: "POST", cookie: phone, body: {} })).status).toBe(400);
+    expect((await call("/api/account/delete", { method: "POST", cookie: phone, origin: "https://elsewhere.example", body: { confirm: "delete" } })).status).toBe(403);
+    const done = await call("/api/account/delete", { method: "POST", cookie: phone, body: { confirm: "delete" } });
+    expect(done.body).toEqual({ deleted: true, signInLinks: 2, keptConsentDays: 0 });
+    expect(done.cookie).toMatch(/Max-Age=0/);
+    expect((await call("/api/auth/me", { cookie: phone })).status).toBe(401);
+    expect((await call("/api/auth/me", { cookie: laptop })).status).toBe(401);
+    const left = await pool.query(
+      `SELECT (SELECT count(*) FROM users WHERE user_id = $1)::int AS users, (SELECT count(*) FROM consents WHERE owner_user_id = $1)::int AS consents,
+              (SELECT count(*) FROM sessions WHERE user_id = $1)::int AS sessions, (SELECT count(*) FROM saved_looks WHERE owner_user_id = $1)::int AS looks,
+              (SELECT count(*) FROM sign_in_links WHERE lower(email) = lower($2))::int AS links, (SELECT count(*) FROM account_deletions WHERE email_sha256 = encode(sha256(convert_to(lower($2), 'UTF8')), 'hex'))::int AS kept`,
+      [id, who],
+    );
+    expect(left.rows[0]).toEqual({ users: 0, consents: 0, sessions: 0, looks: 0, links: 0, kept: 0 });
+  });
+
+  it("keeps only the consent history, under a hash of the address, when the setting says so, and only for that long", async () => {
+    // @ts-expect-error plain JavaScript module
+    const { createControls, keepConsentDays, purgeExpiredDeletions } = await import("../../../server/auth/controls.mjs");
+    expect([keepConsentDays({}), keepConsentDays({ ACCOUNT_DELETION_KEEP_CONSENT_DAYS: "30" }), keepConsentDays({ ACCOUNT_DELETION_KEEP_CONSENT_DAYS: "-1" }), keepConsentDays({ ACCOUNT_DELETION_KEEP_CONSENT_DAYS: "forever" })]).toEqual([0, 30, 0, 0]);
+    const who = `keep.${stamp}@praxis-test.example`;
+    await call("/api/auth/start", { method: "POST", body: { email: who, anonymousSessionId: `anon_keep${stamp}`, consents } });
+    const me = (await call("/api/auth/verify", { method: "POST", body: { token: linkToken() } })).cookie!.split(";")[0];
+    const user = (await call("/api/auth/me", { cookie: me })).body.user;
+    const done = await createControls(pool, { env: { ACCOUNT_DELETION_KEEP_CONSENT_DAYS: "30" } }).delete(user);
+    expect(done).toMatchObject({ deleted: true, keptConsentDays: 30 });
+    const { rows } = await pool.query("SELECT email_sha256, consents, keep_until - deleted_at AS kept FROM account_deletions WHERE email_sha256 = encode(sha256(convert_to(lower($1), 'UTF8')), 'hex')", [who]);
+    expect(rows).toHaveLength(1);
+    expect(JSON.stringify(rows[0])).not.toContain(who);
+    expect(rows[0].consents.map((c: { category: string }) => c.category).sort()).toEqual(["privacy", "terms"]);
+    expect(rows[0].kept.days).toBe(30);
+    expect(await purgeExpiredDeletions(pool, new Date(Date.now() + 31 * 86_400_000))).toBeGreaterThanOrEqual(1);
+    expect((await pool.query("SELECT 1 FROM account_deletions WHERE email_sha256 = $1", [rows[0].email_sha256])).rowCount).toBe(0);
+  });
+
   it("limits how many links one address can ask for", async () => {
     const busy = `busy.${stamp}@praxis-test.example`;
     const statuses = [];

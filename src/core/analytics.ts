@@ -98,6 +98,8 @@ export const EVENTS = {
   search_piece_opened: { category: "commercial", trigger: "A piece found on Find a piece is opened at its store. Only when the store gives a real https link.", props: { productId: { type: "string", required: true }, rank: { type: "number", required: true } } },
   account_migrated: { category: "account", trigger: "What a guest saved is moved to the account at sign-in.", props: { looks: { type: "number", required: true }, duplicates: { type: "number", required: true }, feedback: { type: "number", required: true }, wardrobe: { type: "number" } } },
   account_consent_withdrawn: { category: "account", trigger: "A signed-in account withdraws its agreement to the terms and privacy notice from Your data; it is signed out on every device.", props: { count: { type: "number", required: true } } },
+  account_data_downloaded: { category: "account", trigger: "A signed-in account downloads everything the server keeps for it from Your data.", props: {} },
+  account_deleted: { category: "account", trigger: "A signed-in account is deleted from Your data, with everything kept with it; it is signed out on every device and this browser is cleared.", props: {} },
   account_migration_failed: { category: "account", trigger: "Moving a guest's looks or feedback to the account could not be written; what was not moved stays as it was.", props: { part: { type: "enum", values: ["looks", "feedback"], required: true } } },
 } as const satisfies Record<string, EventSpec>;
 
