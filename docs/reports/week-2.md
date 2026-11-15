@@ -150,6 +150,10 @@ On 2026-11-15 the first run had finished: 73 of 75 with a cut-out and a vector (
 
 Email on 2026-11-15: Tarek verified `trypraxis.ai` in Resend (records on `send.trypraxis.ai` and `resend._domainkey`, in Cloudflare). Staging has `RESEND_API_KEY` (passed through stdin, never shown), `MAIL_FROM=Praxis <no-reply@trypraxis.ai>` and `VITE_AUTH=magic-link`, and runs `f0f01ba`. Checks: a test email through Resend answered 200; the sign-in screen offers only the email link; `POST /api/auth/start` answered 202; the email reached Sami's inbox (not spam), the link opened staging, and the database shows an active session for the account.
 
+Finished on 2026-11-15, after Tarek gave Railway access to the PraxisSltns organisation and decided the old `production` service stays as it is:
+- `gateway`, `ai` and `catalogue-job` deploy from `main` (`railway service source connect --branch main`), with Wait for CI set in the dashboard. A merge that changes nothing a service watches is recorded as SKIPPED, as `abc4af0` was.
+- `catalogue-job` runs `npm run catalogue:process` at 03:00 UTC daily, restart policy Never. A run started with `railway cron run` exited after 2 s: 2 queued, both the test store's missing photo, nothing else left to do.
+
 Found on the way:
 - The ai container sees the host's 48 CPUs but may use 8. PyTorch started 48 threads and was throttled: a text vector took 11 s and a cut-out 145 s. `TORCH_THREADS=8` and `OMP_NUM_THREADS=8` bring search to 0.05 s.
 - Railway's Redis doesn't answer over IPv4 on the private network. `REDIS_FAMILY=6` makes the client use IPv6 (`4e2d5fe`).
@@ -158,6 +162,5 @@ Found on the way:
 - Railway stops reading `railway.json` on 2026-12-01; its replacement is `.railway/railway.ts` (`railway config migrate`). That file applies to the whole project, production included, so it waits for the owner's say.
 
 Still open:
-- Both app services deploy from `dev`, not `main`, without Wait for CI: Railway's GitHub access needs adding for the PraxisSltns organisation by its owner, then Branch `main` and Wait for CI on `gateway` and `ai`.
-- `catalogue-job`: start command `npm run catalogue:process`, cron `0 3 * * *`, restart policy Never (dashboard).
+- Railway's config file moves to `.railway/railway.ts` before 2026-12-01; it covers the whole project, so it waits for Tarek's OK.
 - DMARC for `trypraxis.ai` (TXT `_dmarc`, `v=DMARC1; p=none;`): optional, helps delivery. Everything it needs is in `docs/deploy/railway.md`, plus `AI_PROVIDER_PRODUCT_MATCHING=catalogue` and a Railway cron service for `npm run catalogue:process`.
