@@ -125,7 +125,11 @@ On local `dev` (`20eb247`), not pushed:
 - **Search quality:** 9 of 10.
 - **Migrations:** 7, and the new one runs down and up cleanly.
 
-Still needed from people: the staging spend approval, a merge token owned by `PraxisSltns` (`docs/deploy/ci.md` §6, now explained), Resend, the legal text (including what account deletion keeps), and the first real retailer. Also, the retailers' agreement before `CATALOGUE_MATCHING_FOR=everyone`.
+- **Staging (Phase 5):** live at https://gateway-staging-e38e108b.up.railway.app, deploying from `main` after CI, with the catalogue processed, search in about 0.05 s, catalogue looks, email sign-in from `no-reply@trypraxis.ai`, and a nightly catalogue job.
+
+Done since the phases began: the staging spend approval, the merge token owned by `PraxisSltns`, Resend with `trypraxis.ai` verified, and Railway's access to the organisation.
+
+Still open: Railway's new config format before 2026-12-01 (Tarek's OK, as it covers production too); confirming Wait for CI on the next code merge to `main`; DMARC for `trypraxis.ai` (optional). On hold by Tarek's decision: the legal text (including what account deletion keeps), the first real retailer, and the retailers' agreement before `CATALOGUE_MATCHING_FOR=everyone`.
 
 ## Phase 5: staging
 
