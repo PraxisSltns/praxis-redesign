@@ -5,12 +5,13 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, Bookmark, Menu as MenuIcon, X } from "lucide-react";
+import { ArrowLeft, Bookmark, Menu as MenuIcon, Search as SearchIcon, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { track } from "../../core/analytics";
 import { FRESH, useJourney } from "../lib/journeyContext";
 import { trapTab } from "../lib/focusTrap";
 import { useScrollLock } from "../lib/scrollLock";
+import { useSearchAccess } from "../lib/searchAccess";
 import { TextButton } from "./controls";
 
 export interface SpineStep {
@@ -30,6 +31,7 @@ interface TopBarProps {
 
 export function TopBar({ spine, back = null }: TopBarProps) {
   const { href, user, openGate, store } = useJourney();
+  const canSearch = Boolean(useSearchAccess());
   const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
   /* The button that opened the menu, so focus can go back to it on close. */
@@ -61,6 +63,16 @@ export function TopBar({ spine, back = null }: TopBarProps) {
       {/* On desktop the few places to go sit in the bar; a light veil keeps them readable over any photo. */}
       <div className="a-topright flex items-center">
         <nav aria-label="Praxis" className="a-desktop items-center">
+          {canSearch ? (
+            <>
+              <Link to={href("search", { hero: null })} className="a-control a-tertiary a-signin gap-2">
+                <SearchIcon size={15} strokeWidth={1.5} aria-hidden="true" />
+                {/* Below 1280 px the magnifier alone stands for Find a piece, as the bookmark does for Saved looks. */}
+                <span className="sr-only xl:not-sr-only">Find a piece</span>
+              </Link>
+              <span className="a-bar-rule" aria-hidden="true" />
+            </>
+          ) : null}
           <Link to={href("looks", { hero: null })} className="a-control a-tertiary a-signin gap-2">
             <Bookmark size={15} strokeWidth={1.5} aria-hidden="true" />
             {/* Below 1280 px the bookmark alone stands for Saved looks, so the bar clears the step names. */}
@@ -157,6 +169,7 @@ export function PhoneSpine({ steps }: { steps: SpineStep[] }) {
 
 function Menu({ open, onClose, returnTo }: { open: boolean; onClose: () => void; returnTo: { current: HTMLElement | null } }) {
   const { href, store, reduced, user, signOut, openGate } = useJourney();
+  const canSearch = Boolean(useSearchAccess());
   useScrollLock(open);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -176,6 +189,7 @@ function Menu({ open, onClose, returnTo }: { open: boolean; onClose: () => void;
 
   const items = [
     { label: "Start a new look", to: href("", FRESH) },
+    ...(canSearch ? [{ label: "Find a piece", to: href("search", { hero: null }) }] : []),
     { label: "Saved looks", to: href("looks", { hero: null }) },
     { label: "Your wardrobe", to: href("wardrobe", { hero: null }) },
     { label: "Style DNA", to: store.dna ? href("dna", { hero: null }) : href("", { ...FRESH, gate: "dna" }) },

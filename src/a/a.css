@@ -1480,3 +1480,15 @@
   border-radius: 2px;
   background: var(--surface);
 }
+
+/* Find a piece (screens/Search.tsx): cut-outs on a quiet card, all the same height so the grid reads as one shelf. */
+[data-concept="a"] .a-found-image {
+  aspect-ratio: 3 / 4;
+  background: var(--surface, rgba(0, 0, 0, 0.03));
+  padding: 12px;
+}
+[data-concept="a"] .a-search-example {
+  min-height: 36px;
+  padding-inline: 14px;
+  font-size: 14px;
+}

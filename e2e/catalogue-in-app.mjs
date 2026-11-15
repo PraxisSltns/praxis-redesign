@@ -1,6 +1,7 @@
 /**
  * The imported catalogue in the app, end to end in Chromium: with AI_PROVIDER_PRODUCT_MATCHING=catalogue,
- * a Dinner look's pieces come from the imported catalogue, each shown as its cut-out.
+ * a Dinner look's pieces come from the imported catalogue, each shown as its cut-out, and Find a piece
+ * finds pieces by words and by a photo.
  *
  *   npm run build
  *   DATABASE_URL=... REDIS_URL=... AI_SERVICE_URL=... node e2e/catalogue-in-app.mjs
@@ -58,6 +59,23 @@ try {
   check(cutouts.length >= 3 && cutouts.every((c) => c.status === 200 && c.type === "image/png"), `the cut-outs load (${cutouts.length}, all 200 image/png)`);
   check(/Reference photo, not these exact pieces/.test(await page.locator("body").innerText()), "the big photo says it shows the look, not these exact pieces");
   check(ready < 15_000, `the look is ready in ${ready} ms`);
+
+  // Find a piece: words, then a photo, on the same catalogue.
+  check((await page.getByRole("link", { name: "Find a piece" }).count()) > 0, "the bar offers Find a piece while the catalogue is open");
+  await page.goto(`${BASE}/search?mode=light`);
+  await page.getByLabel("What are you looking for?").fill("navy blazer");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const found = page.getByRole("list", { name: "Pieces found" }).locator(":scope > li");
+  await found.first().waitFor({ timeout: 20_000 });
+  const titles = (await found.allInnerTexts()).map((t) => t.replace(/\s+/g, " ").trim());
+  check(titles.slice(0, 3).every((t) => /blazer/i.test(t)), `"navy blazer" finds blazers first (${titles.slice(0, 3).join("; ")})`);
+  check(/closest blazer first/.test(await page.locator("body").innerText()), "the screen says it read the words as a blazer");
+  const foundSrcs = await found.locator("img").evaluateAll((imgs) => imgs.map((i) => i.getAttribute("src") ?? ""));
+  check(foundSrcs.length > 0 && foundSrcs.every((s) => /\/api\/cutouts\/prod_[0-9a-f]{24}\/[0-9a-f]{16}\.png$/.test(s)), "each piece found is shown as its cut-out");
+  await page.locator('input[type="file"][aria-label="Photo of a piece"]').setInputFiles(join(ROOT, "server/retailers/fixtures/images/blt-tan.jpg"));
+  await page.getByText(/pieces? for your photo/).waitFor({ timeout: 20_000 });
+  const byPhoto = (await found.allInnerTexts()).map((t) => t.replace(/\s+/g, " ").trim());
+  check(byPhoto.length > 0 && /belt/i.test(byPhoto[0]), `a photo of a belt finds a belt first (${byPhoto[0] ?? "nothing"})`);
   await browser.close();
 } catch (e) {
   check(false, `ran to the end (${String(e?.message ?? e).split("\n")[0]})`);
