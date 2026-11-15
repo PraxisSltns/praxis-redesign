@@ -148,6 +148,8 @@ Health answers `ok` with the database, Redis and the ai service up. The test cat
 
 On 2026-11-15 the first run had finished: 73 of 75 with a cut-out and a vector (the 2 are the test store's missing photo, on purpose). Search on staging answers in about 0.05 s ("navy blazer" gives blazers, "brown leather belt" the belt first, "white sneakers" sneakers), and the Dinner look with `?stock=live` shows 4 catalogue pieces, each as its cut-out from the staging bucket, ready in 5.9 s.
 
+Email on 2026-11-15: Tarek verified `trypraxis.ai` in Resend (records on `send.trypraxis.ai` and `resend._domainkey`, in Cloudflare). Staging has `RESEND_API_KEY` (passed through stdin, never shown), `MAIL_FROM=Praxis <no-reply@trypraxis.ai>` and `VITE_AUTH=magic-link`, and runs `f0f01ba`. Checks: a test email through Resend answered 200; the sign-in screen offers only the email link; `POST /api/auth/start` answered 202; the email reached Sami's inbox (not spam), the link opened staging, and the database shows an active session for the account.
+
 Found on the way:
 - The ai container sees the host's 48 CPUs but may use 8. PyTorch started 48 threads and was throttled: a text vector took 11 s and a cut-out 145 s. `TORCH_THREADS=8` and `OMP_NUM_THREADS=8` bring search to 0.05 s.
 - Railway's Redis doesn't answer over IPv4 on the private network. `REDIS_FAMILY=6` makes the client use IPv6 (`4e2d5fe`).
@@ -158,4 +160,4 @@ Found on the way:
 Still open:
 - Both app services deploy from `dev`, not `main`, without Wait for CI: Railway's GitHub access needs adding for the PraxisSltns organisation by its owner, then Branch `main` and Wait for CI on `gateway` and `ai`.
 - `catalogue-job`: start command `npm run catalogue:process`, cron `0 3 * * *`, restart policy Never (dashboard).
-- Email: Resend and the DNS records for `trypraxis.ai`; until then sign-in on staging is the preview. Everything it needs is in `docs/deploy/railway.md`, plus `AI_PROVIDER_PRODUCT_MATCHING=catalogue` and a Railway cron service for `npm run catalogue:process`.
+- DMARC for `trypraxis.ai` (TXT `_dmarc`, `v=DMARC1; p=none;`): optional, helps delivery. Everything it needs is in `docs/deploy/railway.md`, plus `AI_PROVIDER_PRODUCT_MATCHING=catalogue` and a Railway cron service for `npm run catalogue:process`.
