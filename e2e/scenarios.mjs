@@ -1404,10 +1404,12 @@ await scenario(
     await openTryOn(p);
     await button(p, "Continue").click();
     await button(p, "I agree").click();
+    const asked = Date.now();
     await p.getByRole("radio", { name: /Take a photo/ }).first().click();
-    await p.waitForTimeout(1500);
+    // Wait for the answer rather than a fixed time: a busy machine can take over 1.5 s to refuse the camera.
+    await p.waitForFunction(() => /Camera access is turned off|couldn’t find a camera|camera is not available/i.test(document.body.innerText), null, { timeout: 8000 }).catch(() => undefined);
     const t = await body(p);
-    check(/Camera access is turned off|couldn’t find a camera|camera is not available/i.test(t) && /Upload a photo instead/.test(t), "the camera problem is explained with a way on");
+    check(/Camera access is turned off|couldn’t find a camera|camera is not available/i.test(t) && /Upload a photo instead/.test(t), `the camera problem is explained with a way on (after ${Date.now() - asked} ms)`);
     check((await p.getByRole("radio", { name: /Upload a photo/ }).count()) > 0, "upload is still offered");
   },
   { premium: true },
@@ -1448,9 +1450,11 @@ if (wanted("TRY7")) {
     await openTryOn(p);
     await button(p, "Continue").click();
     await button(p, "I agree").click();
+    const asked = Date.now();
     await p.getByRole("radio", { name: /Take a photo/ }).first().click();
-    await p.waitForTimeout(1500);
-    check(await p.locator("video").filter({ visible: true }).count(), "the live preview shows");
+    // Wait for the preview rather than a fixed time: the fake camera can take over 1.5 s to start on a busy machine.
+    await p.locator("video").filter({ visible: true }).first().waitFor({ timeout: 8000 }).catch(() => undefined);
+    check(await p.locator("video").filter({ visible: true }).count(), `the live preview shows (after ${Date.now() - asked} ms)`);
     await p.screenshot({ path: join(OUT, "TRY7-phone-camera.png") });
     await button(p, "Take photo").click();
     await p.waitForTimeout(1500);
