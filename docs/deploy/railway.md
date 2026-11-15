@@ -72,6 +72,11 @@ The project already has a service whose public address is `praxis-redesign-produ
 - Set `TORCH_THREADS` and `OMP_NUM_THREADS` on `ai` to its CPU limit (8). Without them PyTorch starts a thread per host CPU (48) and is throttled: search took 11 s and a cut-out 145 s.
 - Batch work runs over SSH: `railway ssh -s gateway -e staging -- 'cd /app && npm run db:seed'`.
 
+## Backups and the down-alert
+
+- **Backups.** Railway backs up volumes from the dashboard: staging → `Postgres` → **Backups** → turn on a **daily** schedule. Do the same for `gateway-volume` (outfit pictures) if they matter. A restore is from the same tab. The bucket isn't backed up this way: cut-outs can be made again from the products' photos (`npm run catalogue:process`).
+- **Down-alert.** `.github/workflows/uptime.yml` checks staging every hour (health ok with the database, Redis and the ai service up, and the page loading), trying three times a minute apart. A failed run is the alert: GitHub emails whoever last changed the schedule. Run it by hand from Actions → "Staging uptime". About 720 Actions minutes a month.
+
 ## Checking a deploy
 
 - The deploy log shows the pre-deploy step (`npm run db:migrate`) before the health check.

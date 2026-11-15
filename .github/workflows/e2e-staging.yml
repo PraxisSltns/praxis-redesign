@@ -3,18 +3,21 @@
 # the site the way a visitor does; no secrets are used.
 #
 # Suites 12 (AI contracts) and 14 (hybrid catalogue) need a server started by the test run itself, with
-# a stand-in Gemini and test store, so they're left out by default against a deployed site.
+# a stand-in Gemini and test store, so they're left out by default against a deployed site. Suite 7 tests
+# the sign-in preview; staging signs people in for real (VITE_AUTH=magic-link), which e2e/signin-magic-link.mjs
+# checks locally, so 7 is left out too.
 name: E2E against staging
 
 on:
   workflow_dispatch:
     inputs:
       url:
-        description: Staging address, for example https://praxis-staging.up.railway.app
+        description: Staging address
         required: true
+        default: https://gateway-staging-e38e108b.up.railway.app
       suites:
         description: Which suites (comma separated)
-        default: 1,2,3,4,5,6,7,8,9,10,11,13,15
+        default: 1,2,3,4,5,6,8,9,10,11,13,15
 
 permissions:
   contents: read
