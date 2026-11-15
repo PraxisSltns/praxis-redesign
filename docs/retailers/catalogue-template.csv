@@ -1,0 +1,6 @@
+product_id,title,brand,description,product_type,tags,image_urls,product_url,variant_id,size,colour,sku,price,currency,available,stock_quantity
+BLZ-NAVY,Navy Wool Blazer,Your Brand,"Single-breasted, half-lined, in a soft wool twill.",Blazers,tailoring|wool,https://cdn.your-store.com/blz-navy-1.jpg|https://cdn.your-store.com/blz-navy-2.jpg,https://your-store.com/products/navy-wool-blazer,BLZ-NAVY-38,38,Navy,YB-BLZ-NAVY-38,395.00,USD,yes,3
+BLZ-NAVY,Navy Wool Blazer,Your Brand,,,,,https://your-store.com/products/navy-wool-blazer,BLZ-NAVY-40,40,Navy,YB-BLZ-NAVY-40,395.00,USD,yes,5
+BLZ-NAVY,Navy Wool Blazer,Your Brand,,,,,https://your-store.com/products/navy-wool-blazer,BLZ-NAVY-42,42,Navy,YB-BLZ-NAVY-42,395.00,USD,no,0
+SNK-WHT,White Leather Sneakers,Your Brand,Low-top court sneakers in smooth leather.,Footwear,shoes|leather,https://cdn.your-store.com/snk-wht-1.jpg,https://your-store.com/products/white-leather-sneakers,SNK-WHT-42,42,White,YB-SNK-WHT-42,180.00,USD,yes,8
+BLT-TAN,Tan Leather Belt,Your Brand,,Accessories,belt|leather,https://cdn.your-store.com/blt-tan-1.jpg,https://your-store.com/products/tan-leather-belt,,,Tan,,75.00,USD,,
