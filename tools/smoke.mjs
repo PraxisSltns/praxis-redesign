@@ -37,7 +37,11 @@ await step("health", async () => {
   const h = await res.json();
   check(res.status === 200 && h.ok, `health answers (version ${h.version}, commit ${h.commit})`);
   if (EXPECT) check(h.commit === EXPECT, `the deployed commit is ${EXPECT}`);
-  check(Array.isArray(h.ai?.providersSet) && h.ai.providersSet.length === 0, "no AI provider is named (free ones on: " + (h.ai?.freeOn?.join(", ") || "none") + ")");
+  // A provider named on purpose (staging names the free catalogue for product matching) is fine when it is free.
+  const named = Array.isArray(h.ai?.providersSet) ? h.ai.providersSet : null;
+  const live = named?.length ? ((await (await get("/api/ai")).json().catch(() => null))?.live ?? []) : [];
+  const paidNamed = (named ?? []).filter((s) => live.find((l) => l.service === s)?.billable !== false);
+  check(named !== null && paidNamed.length === 0, "every AI provider named is a free one (named: " + (named?.join(", ") || "none") + "; free defaults on: " + (h.ai?.freeOn?.join(", ") || "none") + ")" + (paidNamed.length ? " – not free: " + paidNamed.join(", ") : ""));
   check(h.ai?.billableAllowed === false && h.tryOn?.billableAllowed === false && h.tryOn?.providerSet === false, "paid AI and image calls are off");
 });
 
