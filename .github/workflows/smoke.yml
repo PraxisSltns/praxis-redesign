@@ -16,7 +16,8 @@ permissions:
 jobs:
   smoke:
     if: github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success'
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56 has no Chromium build for ubuntu-latest (26.04) yet.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
