@@ -3,7 +3,7 @@
  * everything at once. Reached from the menu and from Style DNA. Nothing here is sent anywhere.
  */
 import { useEffect, useState } from "react";
-import { listAccountConsents, withdrawAccountConsents, type AccountConsent } from "../../core/accountApi";
+import { deleteAccount, exportAccountData, listAccountConsents, withdrawAccountConsents, type AccountConsent } from "../../core/accountApi";
 import { track } from "../../core/analytics";
 import { AUTH_MODE } from "../../core/config";
 import { deleteLocalData, wardrobeEntries, wardrobePhoto } from "../../core/data";
@@ -96,6 +96,82 @@ function AccountConsents({ email, onWithdrawn }: { email: string; onWithdrawn: (
   );
 }
 
+/**
+ * With a real account: download everything the server keeps for it, and delete it. Deleting removes the
+ * account and everything kept with it, signs it out on every device, and clears this browser too.
+ */
+function AccountControls({ onDeleted }: { onDeleted: () => void }) {
+  const [busy, setBusy] = useState<"download" | "delete" | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  const download = async () => {
+    setBusy("download");
+    setFailed(null);
+    const r = await exportAccountData();
+    setBusy(null);
+    if (!r.ok) return setFailed(r.error);
+    const { ok: _ok, ...data } = r;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `praxis-account-${data.exportedAt.slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    track("account_data_downloaded", {});
+  };
+
+  const remove = async () => {
+    setBusy("delete");
+    setFailed(null);
+    const r = await deleteAccount();
+    if (!r.ok) {
+      setBusy(null);
+      return setFailed(r.error);
+    }
+    track("account_deleted", {});
+    onDeleted();
+  };
+
+  return (
+    <section aria-labelledby="account-controls" className="flex flex-col gap-3">
+      <h2 id="account-controls" className="text-[13px] uppercase tracking-[0.08em] text-[var(--muted)]">
+        Your account’s data
+      </h2>
+      <p className="max-w-[48ch] leading-6 text-[var(--muted)]">Download a copy of everything Praxis keeps for your account, or delete your account and all of it.</p>
+      {failed ? (
+        <p role="alert" className="text-[14px] leading-6">
+          {failed}
+        </p>
+      ) : null}
+      {confirming ? (
+        <div className="flex flex-col gap-4">
+          <p className="max-w-[46ch] leading-6">This deletes your account and everything kept with it: saved looks, pieces you own, feedback and what you agreed to. You’re signed out on every device, and this browser is cleared too. It can’t be undone.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <PrimaryButton onClick={() => void remove()} disabled={busy !== null}>
+              {busy === "delete" ? "Deleting…" : "Delete my account"}
+            </PrimaryButton>
+            <TextButton onClick={() => setConfirming(false)} disabled={busy !== null}>
+              Keep it
+            </TextButton>
+          </div>
+        </div>
+      ) : (
+        <div className="-ml-2 flex flex-wrap items-center gap-2">
+          <TextButton onClick={() => void download()} disabled={busy !== null}>
+            {busy === "download" ? "Preparing…" : "Download my data"}
+          </TextButton>
+          <TextButton onClick={() => setConfirming(true)} disabled={busy !== null}>
+            Delete my account
+          </TextButton>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function YourData() {
   const { href, store, faceImage, setFaceImage, ownedItem, setOwnedItem, base, user, signOut } = useJourney();
   const [confirming, setConfirming] = useState(false);
@@ -144,7 +220,7 @@ export function YourData() {
           <h1 className="a-display">Your data on this device</h1>
           <p className="mt-4 max-w-[48ch] leading-6 text-[var(--muted)]">
             {AUTH_MODE === "magic-link" && user
-              ? "Praxis keeps these in this browser. Your saved looks are also kept with your account, so they follow you when you sign in elsewhere. Photos stay in this tab and are gone when you close it."
+              ? "Praxis keeps these in this browser. Your saved looks, pieces and feedback are also kept with your account, so they follow you when you sign in elsewhere. Photos stay in this tab and are gone when you close it."
               : "Praxis keeps these in this browser only. Nothing is sent to a server yet. Photos stay in this tab and are gone when you close it."}
           </p>
         </div>
@@ -182,6 +258,15 @@ export function YourData() {
             onWithdrawn={() => {
               signOut();
               window.location.assign(base || "/");
+            }}
+          />
+        ) : null}
+
+        {AUTH_MODE === "magic-link" && user ? (
+          <AccountControls
+            onDeleted={() => {
+              signOut();
+              deleteAll();
             }}
           />
         ) : null}

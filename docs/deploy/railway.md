@@ -59,9 +59,23 @@ The project already has a service whose public address is `praxis-redesign-produ
    - Settings > Source: root directory `services/ai`, branch `main`, Wait for CI on. It builds from `services/ai/Dockerfile` with `services/ai/railway.json` (health check `/health`).
    - **Don't generate a public domain.**
    - Name the service `ai`.
-   - Variables: `PORT=8000`. Leave `HOST` unset: it defaults to `::`, the private network's IPv6. `CUTOUT_MODEL` is a build-time choice (the image bakes the weights): leave it at `full`.
+   - Variables: `PORT=8000`, `TORCH_THREADS=8`, `OMP_NUM_THREADS=8` (match the memory/CPU plan: the container sees the host's 48 CPUs but may use 8, and with 48 threads a text vector took 11 s instead of 0.05 s). Leave `HOST` unset: it defaults to `::`, the private network's IPv6. `CUTOUT_MODEL` is a build-time choice (the image bakes the weights): leave it at `full`.
    - Resources: the image is 3.8 GB (CPU-only PyTorch plus about 1.2 GB of weights). Give the service **at least 8 GB of memory**. With both models loaded it uses 2.4 GB, and a full-size cut-out needs more than another 1.4 GB: in a 3.8 GB Docker VM the container was killed for memory (`OOMKilled`) during its first cut-out (2026-11-04). Start-up takes about 17 s while the models load, inside the 120 s health check.
    - On the gateway, add `AI_SERVICE_URL=http://ai.railway.internal:8000`. Search (`/api/search`) and the batch job (`npm run catalogue:process`, from a Railway one-off command or a cron service) need it. `/api/health` then reports `"ai": "up"`. If it's down, health reports `"down"` but the gateway stays healthy.
+
+## Lessons from building staging (2026-11-14)
+
+- Dashboard edits are staged: nothing changes until **Deploy** (or a redeploy) picks them up.
+- **Pre-deploy command** and **Custom start command** are separate boxes. The migration goes in pre-deploy; the start command stays `npm run start`.
+- Set `REDIS_FAMILY=6` on every service that uses Redis: Railway's Redis answers only on the private network's IPv6 address.
+- `railway environment edit --service-config` didn't apply service settings (CLI 5.74), so set them in the dashboard.
+- Set `TORCH_THREADS` and `OMP_NUM_THREADS` on `ai` to its CPU limit (8). Without them PyTorch starts a thread per host CPU (48) and is throttled: search took 11 s and a cut-out 145 s.
+- Batch work runs over SSH: `railway ssh -s gateway -e staging -- 'cd /app && npm run db:seed'`.
+
+## Backups and the down-alert
+
+- **Backups.** Railway backs up volumes from the dashboard: staging → `Postgres` → **Backups** → turn on a **daily** schedule. Do the same for `gateway-volume` (outfit pictures) if they matter. A restore is from the same tab. The bucket isn't backed up this way: cut-outs can be made again from the products' photos (`npm run catalogue:process`).
+- **Down-alert.** `.github/workflows/uptime.yml` checks staging every hour (health ok with the database, Redis and the ai service up, and the page loading), trying three times a minute apart. A failed run is the alert: GitHub emails whoever last changed the schedule. Run it by hand from Actions → "Staging uptime". About 720 Actions minutes a month.
 
 ## Checking a deploy
 

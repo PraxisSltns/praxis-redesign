@@ -21,6 +21,8 @@
     "db:migrate:down": "node --env-file-if-exists=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations --migration-file-language sql --check-order down",
     "db:migrate:create": "node node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations --migration-file-language sql create",
     "retailers:import": "node --env-file-if-exists=.env server/retailers/cli.mjs",
+    "retailers:check": "node server/retailers/check.mjs",
+    "retailers:report": "node --env-file-if-exists=.env server/retailers/report.mjs",
     "catalogue:process": "node --env-file-if-exists=.env server/catalogue/cli.mjs",
     "ai:dev": "cd services/ai && .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000"
   },

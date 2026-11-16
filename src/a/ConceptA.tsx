@@ -15,6 +15,7 @@ import { InternalAnalytics } from "./screens/Internal";
 import { YourData } from "./screens/YourData";
 import { VerifySignIn } from "./screens/VerifySignIn";
 import { Wardrobe } from "./screens/Wardrobe";
+import { Search } from "./screens/Search";
 import { LookDetail, Looks } from "./screens/Looks";
 import { Build } from "./screens/moment/Build";
 import { Question } from "./screens/moment/Question";
@@ -86,6 +87,7 @@ function Shell() {
           <Route path="dna/result" element={<DnaOnly><DnaResult /></DnaOnly>} />
           <Route path="data" element={<YourData />} />
           <Route path="wardrobe" element={<Wardrobe />} />
+          <Route path="search" element={<Search />} />
           <Route path="auth/verify" element={<VerifySignIn />} />
           {/* Test mode and the event log: in development, or in a build made with VITE_INTERNAL_PAGE=true; never in the live build. */}
           {SHOW_INTERNAL && <Route path="internal/analytics" element={<InternalAnalytics />} />}

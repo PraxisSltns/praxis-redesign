@@ -302,6 +302,8 @@ An item that breaks the contract is rejected and listed in the report, never sto
 
 ## CSV catalogue files
 
+Retailers get the template and a plain guide in [docs/retailers/](retailers/README.md). Check a file before importing it with `npm run retailers:check -- --csv <file>` (it writes nothing), and see where every store stands with `npm run retailers:report`.
+
 One row per variant (one size of one piece), with a header row. Rows that share a `product_id` make one piece, and its product columns are read from its first row. UTF-8, comma-separated, RFC 4180 quoting (a field with a comma, a quote or a line break is wrapped in `"`, and a `"` inside it is written `""`).
 
 | Column | Required | Meaning |

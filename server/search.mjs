@@ -12,7 +12,7 @@
  * slot is given, the search keeps to that kind's slot and puts the closest of that exact kind first; only if the slot has
  * too few pieces does it fill up with the nearest others. The answer says what it understood (query.kind).
  */
-import { classify } from "../src/shared/ontology.mjs";
+import { classify, colourOf } from "../src/shared/ontology.mjs";
 import { createAiService, toVector } from "./ai-service.mjs";
 import { db } from "./db.mjs";
 import { storage } from "./storage.mjs";
@@ -71,14 +71,18 @@ export async function nearest(pool, vector, { slot = null, size = null, limit = 
 }
 
 /**
- * The nearest pieces in the kind's slot: the closest of that exact kind first, then the rest by closeness
- * (so "navy blazer" can show a navy suit jacket before a charcoal blazer). Filled up from other slots only
- * when the slot runs out.
+ * The nearest pieces in the kind's slot. When the words name a colour too ("navy blazer"), the pieces of
+ * that exact kind in that colour come first, closest first; otherwise the closest of that exact kind does.
+ * The rest follow by closeness (so "navy blazer" can show a navy suit jacket before a charcoal blazer).
+ * Filled up from other slots only when the slot runs out.
  */
 export async function withinKind(pool, vector, kind, query) {
   const inSlot = await nearest(pool, vector, { ...query, slot: kind.slot });
-  const best = inSlot.find((r) => r.subcategory === kind.subcategory);
-  const ordered = best ? [best, ...inSlot.filter((r) => r !== best)] : inSlot;
+  const colour = query.text ? colourOf(query.text) : undefined;
+  const exact = inSlot.filter((r) => r.subcategory === kind.subcategory);
+  const coloured = colour ? exact.filter((r) => r.colour === colour) : [];
+  const leaders = coloured.length ? coloured : exact.slice(0, 1);
+  const ordered = [...leaders, ...inSlot.filter((r) => !leaders.includes(r))];
   if (ordered.length >= query.limit) return ordered.slice(0, query.limit);
   const seen = new Set(ordered.map((r) => r.product_id));
   const others = (await nearest(pool, vector, { ...query, slot: null, limit: query.limit + ordered.length })).filter((r) => !seen.has(r.product_id));

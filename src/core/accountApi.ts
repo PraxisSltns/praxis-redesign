@@ -55,6 +55,10 @@ export interface AccountConsent {
 }
 export const listAccountConsents = () => call<{ consents: AccountConsent[] }>("/api/account/consents");
 export const withdrawAccountConsents = () => post<{ withdrawn: string[]; signedOut: number }>("/api/account/consents/withdraw", {});
+/** Everything the server keeps for the account (GET /api/account/export), to save as a file. */
+export const exportAccountData = () => call<Record<string, unknown> & { exportedAt: string }>("/api/account/export");
+/** Deletes the account and everything kept with it, and ends every session (POST /api/account/delete). */
+export const deleteAccount = () => post<{ deleted: boolean; signInLinks: number; keptConsentDays: number }>("/api/account/delete", { confirm: "delete" });
 const put = <T>(path: string, body: unknown) => call<T>(path, { method: "PUT", body: JSON.stringify(body) });
 const del = <T>(path: string, body: unknown) => call<T>(path, { method: "DELETE", body: JSON.stringify(body) });
 export const accountWardrobe = () => call<{ items: WardrobeEntry[] }>("/api/wardrobe");

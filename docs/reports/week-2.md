@@ -125,8 +125,46 @@ On local `dev` (`20eb247`), not pushed:
 - **Search quality:** 9 of 10.
 - **Migrations:** 7, and the new one runs down and up cleanly.
 
-Still needed from people: the staging spend approval, a merge token owned by `PraxisSltns` (`docs/deploy/ci.md` §6, now explained), Resend, the legal text (including what account deletion keeps), and the first real retailer. Also, the retailers' agreement before `CATALOGUE_MATCHING_FOR=everyone`.
+- **Staging (Phase 5):** live at https://gateway-staging-e38e108b.up.railway.app, deploying from `main` after CI, with the catalogue processed, search in about 0.05 s, catalogue looks, email sign-in from `no-reply@trypraxis.ai`, and a nightly catalogue job.
+
+Done since the phases began: the staging spend approval, the merge token owned by `PraxisSltns`, Resend with `trypraxis.ai` verified, and Railway's access to the organisation.
+
+Still open: Railway's new config format before 2026-12-01 (Tarek's OK, as it covers production too); confirming Wait for CI on the next code merge to `main`; DMARC for `trypraxis.ai` (optional). On hold by Tarek's decision: the legal text (including what account deletion keeps), the first real retailer, and the retailers' agreement before `CATALOGUE_MATCHING_FOR=everyone`.
 
 ## Phase 5: staging
 
-Unblocked on 2026-11-13: Sami confirmed Tarek's approval of the staging spend on Railway, the sender address `no-reply@trypraxis.ai`, and approval of the organisation-owned merge token. The first retailer and the legal text are paused, so staging keeps `CATALOGUE_MATCHING_FOR=test` and the draft consent versions. Everything it needs is in `docs/deploy/railway.md`, plus `AI_PROVIDER_PRODUCT_MATCHING=catalogue` and a Railway cron service for `npm run catalogue:process`.
+Unblocked on 2026-11-13: Sami confirmed Tarek's approval of the staging spend on Railway, the sender address `no-reply@trypraxis.ai`, and approval of the organisation-owned merge token. The first retailer and the legal text are paused, so staging keeps `CATALOGUE_MATCHING_FOR=test` and the draft consent versions.
+
+### Built on 2026-11-14
+
+Environment `staging` in the Railway project `praxis-redesign` (workspace "Bob Wazneh's Projects"), EU West, next to the untouched `production`:
+
+| Service | What | State |
+|---|---|---|
+| `Postgres` | `pgvector/pgvector:0.8.0-pg16`, volume on its data folder | up; all 7 migrations ran as the gateway's pre-deploy step |
+| `Redis` | Railway's Redis | up |
+| bucket `praxis-staging` | Railway bucket, `ams` | up; keys held only in the gateway's variables |
+| `gateway` | the app, volume on `/data`, https://gateway-staging-e38e108b.up.railway.app | up; start `npm run start`, pre-deploy `npm run db:migrate`, health check `/api/health` |
+| `ai` | `services/ai`, private, 8 GB | up |
+| `catalogue-job` | for `npm run catalogue:process` nightly | created with its variables; offline until its start command and schedule are set |
+
+Health answers `ok` with the database, Redis and the ai service up. The test catalogues are imported (78 pieces), and the first processing run makes cut-outs and vectors at about 150 s a piece on the ai service's CPU (cut-out about 145 s, vector about 12 s).
+
+On 2026-11-15 the first run had finished: 73 of 75 with a cut-out and a vector (the 2 are the test store's missing photo, on purpose). Search on staging answers in about 0.05 s ("navy blazer" gives blazers, "brown leather belt" the belt first, "white sneakers" sneakers), and the Dinner look with `?stock=live` shows 4 catalogue pieces, each as its cut-out from the staging bucket, ready in 5.9 s.
+
+Email on 2026-11-15: Tarek verified `trypraxis.ai` in Resend (records on `send.trypraxis.ai` and `resend._domainkey`, in Cloudflare). Staging has `RESEND_API_KEY` (passed through stdin, never shown), `MAIL_FROM=Praxis <no-reply@trypraxis.ai>` and `VITE_AUTH=magic-link`, and runs `f0f01ba`. Checks: a test email through Resend answered 200; the sign-in screen offers only the email link; `POST /api/auth/start` answered 202; the email reached Sami's inbox (not spam), the link opened staging, and the database shows an active session for the account.
+
+Finished on 2026-11-15, after Tarek gave Railway access to the PraxisSltns organisation and decided the old `production` service stays as it is:
+- `gateway`, `ai` and `catalogue-job` deploy from `main` (`railway service source connect --branch main`), with Wait for CI set in the dashboard. A merge that changes nothing a service watches is recorded as SKIPPED, as `abc4af0` was.
+- `catalogue-job` runs `npm run catalogue:process` at 03:00 UTC daily, restart policy Never. A run started with `railway cron run` exited after 2 s: 2 queued, both the test store's missing photo, nothing else left to do.
+
+Found on the way:
+- The ai container sees the host's 48 CPUs but may use 8. PyTorch started 48 threads and was throttled: a text vector took 11 s and a cut-out 145 s. `TORCH_THREADS=8` and `OMP_NUM_THREADS=8` bring search to 0.05 s.
+- Railway's Redis doesn't answer over IPv4 on the private network. `REDIS_FAMILY=6` makes the client use IPv6 (`4e2d5fe`).
+- The CLI's `railway environment edit` answered "No changes to apply" to every service setting (root directory, config file, branch, cron, Wait for CI), and the services didn't read `railway.json`. These were set in the dashboard.
+- The migration first went into the start command instead of the pre-deploy command: the tables were made, the app never started, and the health check failed the deploy. Corrected.
+- Railway stops reading `railway.json` on 2026-12-01; its replacement is `.railway/railway.ts` (`railway config migrate`). That file applies to the whole project, production included, so it waits for the owner's say.
+
+Still open:
+- Railway's config file moves to `.railway/railway.ts` before 2026-12-01; it covers the whole project, so it waits for Tarek's OK.
+- DMARC for `trypraxis.ai` (TXT `_dmarc`, `v=DMARC1; p=none;`): optional, helps delivery. Everything it needs is in `docs/deploy/railway.md`, plus `AI_PROVIDER_PRODUCT_MATCHING=catalogue` and a Railway cron service for `npm run catalogue:process`.

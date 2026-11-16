@@ -1,0 +1,46 @@
+# Is staging up? Every hour, and on demand: the health check must answer ok with the database, Redis and
+# the ai service up, and the page must load. A failed run is the alert: GitHub emails whoever last changed
+# this schedule (and anyone watching the repository's Actions). Read-only, no secrets.
+#
+# About 1 minute of Actions time per run, so about 720 minutes a month.
+name: Staging uptime
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Site to check
+        default: https://gateway-staging-e38e108b.up.railway.app
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Health, dependencies and page
+        env:
+          SITE: ${{ github.event.inputs.url || 'https://gateway-staging-e38e108b.up.railway.app' }}
+        run: |
+          set -u
+          ok=""
+          # Three tries a minute apart, so a deploy's switch-over isn't taken for an outage.
+          for attempt in 1 2 3; do
+            health=$(curl -fsS --max-time 20 "$SITE/api/health" || true)
+            page=$(curl -fsS -o /dev/null -w "%{http_code}" --max-time 20 "$SITE/" || true)
+            if echo "$health" | jq -e '.ok == true and .dependencies.db == "up" and .dependencies.redis == "up" and .dependencies.ai == "up"' >/dev/null 2>&1 && [ "$page" = "200" ]; then
+              ok=yes
+              break
+            fi
+            echo "Attempt $attempt: health=${health:-no answer} page=${page:-no answer}"
+            [ "$attempt" -lt 3 ] && sleep 60
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::Staging is down or degraded at $SITE"
+            exit 1
+          fi
+          echo "Staging is up: $(echo "$health" | jq -c '{commit, dependencies}')"

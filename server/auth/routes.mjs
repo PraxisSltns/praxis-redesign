@@ -16,6 +16,9 @@
  *   GET    /api/feedback        -> { records }    PUT { anonymousSessionId, record }  DELETE { eventId }
  *                                  (server/auth/records.mjs; the page's three-way sync, src/core/accountSync.ts)
  *   DELETE /api/looks           { dedupeKey }  -> { removed } removes the account's look with that key; already gone is 200 too
+ *   GET    /api/account/export  -> everything the server keeps for the account, as a JSON download (server/auth/controls.mjs)
+ *   POST   /api/account/delete  { confirm: "delete" }  -> deletes the account and everything kept with it, ends
+ *                                  every session and clears the cookie; ACCOUNT_DELETION_KEEP_CONSENT_DAYS says what is kept
  *
  * Changes are accepted only from this app's own pages: a POST or DELETE must carry an Origin of
  * APP_ORIGIN or one in CORS_ORIGINS. With SameSite=Lax cookies, that stops other sites acting for a
@@ -26,12 +29,13 @@ import { allowedOrigins } from "../cors.mjs";
 import { db } from "../db.mjs";
 import { readBody } from "../tryon.mjs";
 import { createAccounts } from "./account.mjs";
+import { createControls } from "./controls.mjs";
 import { createRecords } from "./records.mjs";
 import { AuthError } from "./magic-link.mjs";
 import { appOrigin, authProvider } from "./provider.mjs";
 import { cookieHeader, createSessions, SESSION_DAYS } from "./sessions.mjs";
 
-const PATHS = /^\/api\/(auth\/(start|verify|me|sign-out)|account\/(claim|consents|consents\/withdraw)|looks(\/slook_[0-9a-f]{24})?|wardrobe|feedback)$/;
+const PATHS = /^\/api\/(auth\/(start|verify|me|sign-out)|account\/(claim|consents|consents\/withdraw|export|delete)|looks(\/slook_[0-9a-f]{24})?|wardrobe|feedback)$/;
 export const isAccountPath = (pathname) => PATHS.test(pathname);
 
 function reply(res, status, payload, headers = {}) {
@@ -100,6 +104,16 @@ export async function handleAccount(req, res, pathname, { pool = db(), provider 
       const withdrawn = await accounts.withdrawConsents(user);
       const signedOut = await sessions.endAll(user.id);
       return reply(res, 200, { withdrawn, signedOut }, { "Set-Cookie": cookieHeader("", { secure, maxAge: 0 }) });
+    }
+    if (pathname === "/api/account/export" && req.method === "GET") {
+      const data = await createControls(pool, { env }).export(user);
+      return reply(res, 200, data, { "Content-Disposition": `attachment; filename="praxis-account-${data.exportedAt.slice(0, 10)}.json"` });
+    }
+    if (pathname === "/api/account/delete" && req.method === "POST") {
+      const body = await json(req);
+      if (body?.confirm !== "delete") throw new AuthError(400, "bad_request", 'Send { "confirm": "delete" } to delete the account.');
+      const done = await createControls(pool, { env }).delete(user);
+      return reply(res, 200, done, { "Set-Cookie": cookieHeader("", { secure, maxAge: 0 }) });
     }
     if (pathname === "/api/wardrobe" || pathname === "/api/feedback") {
       const wardrobe = pathname === "/api/wardrobe";
