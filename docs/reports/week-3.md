@@ -104,6 +104,8 @@ Release PR #4 was approved and merged on 2026-11-16 at 09:02 UTC (`e407fd4`).
 
 **Why the browser suites fail on staging.** The scenarios that need a Premium customer make one in the browser (the preview sign-in, `premium: true` in `e2e/scenarios.mjs`). Staging signs people in for real, by email link, so it doesn't know that account. "The seeded account has Premium" fails, the account's requests get 401, and the clicks wait for Premium screens (try-on, Style DNA) that never open. That is the same reason suite 7 is already left out. Every failure in the detailed report is one of those three. A visitor who isn't signed in never gets a 401, and suites 1 to 3 pass. This is a limit of the tests against a real-sign-in site, not a fault found in staging. Those screens are covered by the full local run (246 of 247, then fixed).
 
+**One real layout fault found there:** at 375 px, on Linux Chromium (wider font rendering than the Mac), the phone step bar overflowed by about 10 px and "LOOKS" was cut at the edge (`P3-10`, "question: everything inside the screen"). Below 400 px the gap between steps is now 12 px instead of 16 (`PhoneSpine`, `src/a/ui/TopBar.tsx`). Suite 10 locally: 25 of 25 runs, 1004 of 1004 checks.
+
 **Also fixed on the way:** `ubuntu-latest` is now Ubuntu 26.04, and Playwright 1.56 has no Chromium for it. That is why the after-deploy smoke test failed on 2026-11-15. The smoke test and the staging run are pinned to `ubuntu-24.04` (`21fc753`).
 
 **Open:** cover the Premium screens on staging. Either the staging run leaves out the scenarios that need the preview account and says how many, or staging gets a real test account with Premium, signed in by the run. The second needs a sign-in route for tests, so it waits for a decision.

@@ -150,7 +150,7 @@ function Spine({ steps }: { steps: SpineStep[] }) {
 export function PhoneSpine({ steps }: { steps: SpineStep[] }) {
   return (
     <nav aria-label="Progress" className="a-phone-spine a-spine -mx-5 -mt-4 mb-2 lg:hidden">
-      <ol className="flex items-center gap-4 overflow-x-auto px-5">
+      <ol className="flex items-center gap-3 overflow-x-auto px-5 min-[400px]:gap-4">
         {steps.map((s) => (
           <li key={s.label} className="shrink-0" aria-current={s.state === "current" ? "step" : undefined}>
             {s.to && s.state === "done" ? (
