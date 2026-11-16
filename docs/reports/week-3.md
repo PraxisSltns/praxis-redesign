@@ -90,7 +90,23 @@ The retailer and legal items stay on hold by Tarek's decision. Customer-visible 
 
 ### Against staging
 
-Waits for Week 3 to reach `main` (release PR #4), so staging runs this code and its migration. Then: Actions → "E2E against staging", which now leaves out suite 7 by default.
+Release PR #4 was approved and merged on 2026-11-16 at 09:02 UTC (`e407fd4`).
+
+| Check | Result | Evidence |
+|---|---|---|
+| Wait for CI | pass | CI on `main` passed at 09:03, staging went live on `e407fd4` at 09:04. Railway waited for CI |
+| The migration | pass | `1762200000700_account-deletions` ran at 09:04:34, as the pre-deploy step, before the new server started. `account_deletions` is empty (checked over `railway ssh`) |
+| Health | pass | database, Redis and ai up; the page answers 200 |
+| Find a piece | pass | "navy blazer": blazer understood, 12 pieces, Navy Wool Blazer and Navy blazer first, 75 ms. "white trainers": sneakers, white leather sneakers first, 78 ms |
+| Account controls | pass | export and delete answer 401 without a session |
+| Browser suites, first try | not a result | run 43836695953 said "success" with 0 of 0 runs. The unquoted default `1,2,3,…` reached the runner as `1234568910111315`, so nothing was selected. Fixed in `c6077ca`: the default is quoted, an unknown suite number stops the run, and a run that selects nothing fails |
+| Browser suites | 153 of 204 runs, 1576 of 1667 checks | run 43838701498. Suites 1, 2, 3, 8 and 15 pass in full. Failures are in 4 (16 of 17), 5 (15 of 15), 10 (15 of 25), 11 (2), 6, 9 and 13 (1 each) |
+
+**Why the browser suites fail on staging.** The scenarios that need a Premium customer make one in the browser (the preview sign-in, `premium: true` in `e2e/scenarios.mjs`). Staging signs people in for real, by email link, so it doesn't know that account. "The seeded account has Premium" fails, the account's requests get 401, and the clicks wait for Premium screens (try-on, Style DNA) that never open. That is the same reason suite 7 is already left out. Every failure in the detailed report is one of those three. A visitor who isn't signed in never gets a 401, and suites 1 to 3 pass. This is a limit of the tests against a real-sign-in site, not a fault found in staging. Those screens are covered by the full local run (246 of 247, then fixed).
+
+**Also fixed on the way:** `ubuntu-latest` is now Ubuntu 26.04, and Playwright 1.56 has no Chromium for it. That is why the after-deploy smoke test failed on 2026-11-15. The smoke test and the staging run are pinned to `ubuntu-24.04` (`21fc753`).
+
+**Open:** cover the Premium screens on staging. Either the staging run leaves out the scenarios that need the preview account and says how many, or staging gets a real test account with Premium, signed in by the run. The second needs a sign-in route for tests, so it waits for a decision.
 
 ## By hand
 
