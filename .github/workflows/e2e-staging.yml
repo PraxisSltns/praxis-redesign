@@ -17,7 +17,8 @@ on:
         default: https://gateway-staging-e38e108b.up.railway.app
       suites:
         description: Which suites (comma separated)
-        default: 1,2,3,4,5,6,8,9,10,11,13,15
+        # Quoted: unquoted, GitHub reads 1,2,3 as the number 123 and the run selects nothing.
+        default: "1,2,3,4,5,6,8,9,10,11,13,15"
 
 permissions:
   contents: read
@@ -28,7 +29,8 @@ concurrency:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56 has no Chromium build for ubuntu-latest (26.04) yet.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

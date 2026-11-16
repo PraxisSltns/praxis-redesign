@@ -103,6 +103,10 @@ function suiteOf(id) {
 }
 /** SUITE=4,9 runs just those suites. */
 const ONLY_SUITES = process.env.SUITE ? new Set(process.env.SUITE.split(",").map(Number)) : null;
+if (ONLY_SUITES && ![...ONLY_SUITES].every((n) => n in SUITES)) {
+  console.error(`SUITE=${process.env.SUITE} names no known suite in full; use numbers 1 to ${Object.keys(SUITES).length}, comma separated.`);
+  process.exit(2);
+}
 const wanted = (id) => (!ONLY || ONLY.has(id)) && (!ONLY_SUITES || ONLY_SUITES.has(suiteOf(id)));
 
 /** A signed-in Premium customer from the first page, for scenarios that start inside Style DNA or try-on. */
@@ -1526,4 +1530,5 @@ const lines = [
 writeFileSync(join(OUT, "report.md"), lines.join("\n"));
 writeFileSync(join(OUT, "report.json"), JSON.stringify({ base: BASE, results, perf }, null, 2));
 console.log(lines.join("\n"));
-process.exit(passed === results.length ? 0 : 1);
+// A filter that selects nothing is a failure, never an empty pass.
+process.exit(results.length > 0 && passed === results.length ? 0 : 1);
