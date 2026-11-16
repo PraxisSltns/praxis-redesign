@@ -29,7 +29,9 @@ jobs:
       - run: npx playwright-core install chromium
       - name: Smoke test
         env:
-          SMOKE_URL: ${{ github.event.inputs.url || 'https://praxis-redesign-production.up.railway.app' }}
+          # A deploy is tested on the site it went to: Railway names the GitHub environment
+          # "<project> / <environment>", and staging deploys from main while production is held as it is.
+          SMOKE_URL: ${{ github.event.inputs.url || (endsWith(github.event.deployment.environment, '/ staging') && 'https://gateway-staging-e38e108b.up.railway.app' || 'https://praxis-redesign-production.up.railway.app') }}
           SMOKE_COMMIT: ${{ github.event.deployment.sha }}
         run: |
           # Railway reports success when the new build is up; give the switch-over a moment.
