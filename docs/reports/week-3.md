@@ -72,9 +72,27 @@ The retailer and legal items stay on hold by Tarek's decision. Customer-visible 
 
 ### Still waiting
 
-- **Railway's new config format** (`.railway/railway.ts`, `railway config migrate`) before 2026-12-01. The file covers the whole project, including the old service Tarek is keeping, so it waits for his OK.
+- ~~Railway's new config format~~: done on 2026-11-21, below.
 - **Wait for CI:** confirmed at the first merge to `main` that changes code. Week 3 is that merge.
 - **Daily backups:** a dashboard switch (by hand, below).
+
+### Railway's new config format (2026-11-21)
+
+Railway stops reading `railway.json` on 2026-12-01. Done at Sami's request.
+
+| Step | Result | Evidence |
+|---|---|---|
+| Who reads `railway.json` | only the existing service | `railway config migrate` (dry run): in production, the `praxis-redesign` service is managed by it. In staging, no service reads a config file: the gateway, ai, Postgres and Redis run on dashboard settings |
+| Why the existing service is on its October build | found | its settings run `npm run db:migrate` before each deploy, and it has no database. Every deploy since 2026-10-30 fails with "DATABASE_URL … not set" and the October build (`b4421f0`) keeps serving |
+| Railway's generated file | not used as is | it adds a pre-deploy migration from settings that `railway.json` gave staging only. Here that changes nothing, because production already has one, but removing it would un-freeze the service |
+| The decision | keep it frozen | Sami, 2026-11-21. `.railway/railway.ts` keeps production's migration step, with a comment saying removing it un-freezes the service. The file declares nothing in staging |
+| Preview | as expected | production: 2 changes, 0 added, 0 destroyed. Builder, watch paths and the 120 s health check are stored, values `railway.json` already applied on each deploy. Staging: already up to date |
+| Apply | done | `railway config apply --environment production`. `cutover` had nothing to switch: the service had no config file path set. A new preview is up to date |
+| After applying | unchanged, as intended | the deploy it started (`3a27b527`) failed at the migration step, and production still answers with `b4421f0`. Staging answers ok |
+
+The repository now has `.railway/railway.ts` and the `railway` package (3.17.0, Railway's own SDK, dev only, needed by `plan` and `apply`). It no longer has `railway.json` or `services/ai/railway.json`. `docs/deploy/railway.md` describes the new setup and the freeze.
+
+**Still open:** tell Tarek the change was made. His service's settings and its October build are as before.
 
 ## Phase 5: the browser suites
 
@@ -122,4 +140,4 @@ Release PR #4 was approved and merged on 2026-11-16 at 09:02 UTC (`e407fd4`).
 
 - Railway → staging → `Postgres` → Backups → turn on a daily schedule.
 - Approve release PR #6 (the smoke-test fixes and the staging skip), so they reach `main` and staging. Week 3 itself is on `main` already (PRs #4 and #5).
-- Tarek: OK the Railway config change before 1 Dec.
+- Tarek: told of the Railway config change (2026-11-21). His service is unchanged and still frozen.
