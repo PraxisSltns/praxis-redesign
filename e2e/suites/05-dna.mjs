@@ -64,7 +64,7 @@ export default async function (H) {
       const { request, response } = await latest(H, p);
       check(request.styleProfile?.tastes?.includes("classic-tailored") && request.styleProfileId, "the next styling request carries the Style DNA");
       check(response.outfits.some((o) => o.explanation.contributingFactors.some((f) => f.factor === "style_dna")), "and a look says the Style DNA shaped it");
-    });
+    }, { previewSignIn: true });
   }
 
   await scenario("P3-5b", "Correcting a saved Style DNA is kept, apart from the estimate, after a reload", "desktop", async (p) => {
@@ -124,7 +124,7 @@ export default async function (H) {
     await p.goto(`${BASE}/dna?mode=light`);
     await p.waitForTimeout(800);
     check(/Your Style DNA/.test(await body(p)) && /Slim/.test(await body(p)), "signing in again brings it back");
-  });
+  }, { previewSignIn: true });
 
   await scenario("P3-5d", "An own face photo asks for consent first, is checked, and stays on the device", "phone", async (p, shot) => {
     await p.goto(`${BASE}/dna/face?mode=light`);

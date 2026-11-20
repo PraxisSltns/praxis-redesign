@@ -108,10 +108,18 @@ Release PR #4 was approved and merged on 2026-11-16 at 09:02 UTC (`e407fd4`).
 
 **Also fixed on the way:** `ubuntu-latest` is now Ubuntu 26.04, and Playwright 1.56 has no Chromium for it. That is why the after-deploy smoke test failed on 2026-11-15. The smoke test and the staging run are pinned to `ubuntu-24.04` (`21fc753`).
 
-**Open:** cover the Premium screens on staging. Either the staging run leaves out the scenarios that need the preview account and says how many, or staging gets a real test account with Premium, signed in by the run. The second needs a sign-in route for tests, so it waits for a decision.
+**The staging run now skips what it can't run** (`5ce6c54`). With `REAL_SIGN_IN=1`, which the staging workflow sets, every scenario that needs the preview's account is skipped and listed under "Skipped" in the report, with a count per suite. That covers the seeded Premium customer (`premium: true`) and the four scenarios that press the preview's sign-in buttons on the page (P3-5a, P3-5c, P4-6f, P3-9c, now marked `previewSignIn`). A skipped run is never counted as passed. A local run doesn't change.
+
+| Check | Result | Evidence |
+|---|---|---|
+| The skip set is exactly the old failures | pass | the 51 skipped runs are the 51 that failed in run 43838701498. None of them passed there, so no coverage on staging is lost |
+| Locally, suite 9 with and without the skip | pass | with `REAL_SIGN_IN=1`, 12 of 12 runs and P3-9c listed as skipped. Without it, P3-9c runs and passes |
+| Browser suites against staging | pass: 153 of 153 runs, 880 of 880 checks, 51 skipped | run 44791519943 on `5ce6c54`, 2026-11-20 18:37 UTC. Suite 5 (Style DNA) is all skipped, and suite 4 runs 1 of 17 |
+
+**Still open, waiting for a decision:** whether the Premium screens should be tested on staging at all. That needs a real test account with Premium and a way for the run to sign it in, which means a sign-in route for tests on a public server. Until then the full local run covers those screens.
 
 ## By hand
 
 - Railway → staging → `Postgres` → Backups → turn on a daily schedule.
-- Approve the release pull request, so Week 3 reaches `main` and staging.
+- Approve release PR #6 (the smoke-test fixes and the staging skip), so they reach `main` and staging. Week 3 itself is on `main` already (PRs #4 and #5).
 - Tarek: OK the Railway config change before 1 Dec.

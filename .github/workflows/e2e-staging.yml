@@ -6,6 +6,10 @@
 # a stand-in Gemini and test store, so they're left out by default against a deployed site. Suite 7 tests
 # the sign-in preview; staging signs people in for real (VITE_AUTH=magic-link), which e2e/signin-magic-link.mjs
 # checks locally, so 7 is left out too.
+#
+# For the same reason the scenarios that need the preview's account (a seeded Premium customer, or the
+# preview's Apple, Google or email sign-in) are skipped here (REAL_SIGN_IN=1) and listed under "Skipped"
+# in the report: on staging that account doesn't exist, so they could only fail. The full local run covers them.
 name: E2E against staging
 
 on:
@@ -48,6 +52,7 @@ jobs:
         env:
           BASE_URL: ${{ github.event.inputs.url }}
           SUITE: ${{ github.event.inputs.suites }}
+          REAL_SIGN_IN: "1"
         run: npm run e2e
       - name: Keep the report
         if: always()

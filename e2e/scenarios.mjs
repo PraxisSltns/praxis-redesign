@@ -109,11 +109,26 @@ if (ONLY_SUITES && ![...ONLY_SUITES].every((n) => n in SUITES)) {
 }
 const wanted = (id) => (!ONLY || ONLY.has(id)) && (!ONLY_SUITES || ONLY_SUITES.has(suiteOf(id)));
 
+/**
+ * REAL_SIGN_IN=1 is for a site that signs people in for real, by email link (staging). Scenarios that need
+ * the preview's sign-in (a seeded Premium account, or the preview's Apple, Google or email buttons) can't
+ * run there: the server doesn't know that account, so its requests get 401. They are skipped and listed
+ * in the report, never counted as passed.
+ */
+const REAL_SIGN_IN = process.env.REAL_SIGN_IN === "1";
+const skipped = [];
+const skipForSignIn = (id, title, device, needsPreview) => {
+  if (!REAL_SIGN_IN || !needsPreview) return false;
+  skipped.push({ id, title, device: typeof device === "string" ? device : String(device), suite: suiteOf(id), reason: "needs the preview sign-in" });
+  return true;
+};
+
 /** A signed-in Premium customer from the first page, for scenarios that start inside Style DNA or try-on. */
 const PREMIUM_USER = { id: "user_e2e", name: "Sam", email: "sam@example.com", premium: true };
 
-async function scenario(id, title, device, fn, { sim, ip, locale, missingFiles, premium, viewport, reducedMotion, contextOptions, seed } = {}) {
+async function scenario(id, title, device, fn, { sim, ip, locale, missingFiles, premium, previewSignIn, viewport, reducedMotion, contextOptions, seed } = {}) {
   if (!wanted(id)) return;
+  if (skipForSignIn(id, title, device, premium || previewSignIn)) return;
   const ctx = await browser.newContext({ ...(viewport ?? (device === "phone" ? PHONE : DESKTOP)), reducedMotion: reducedMotion ?? "no-preference", ...(locale ? { locale } : {}), ...(contextOptions ?? {}) });
   if (premium)
     await ctx.addInitScript((u) => {
@@ -1435,7 +1450,7 @@ await scenario(
 );
 
 /* A real camera, faked by Chromium: the photo is taken from the live preview. */
-if (wanted("TRY7")) {
+if (wanted("TRY7") && !skipForSignIn("TRY7", "The camera opens, shows a live preview, and the photo taken goes to the preview", "phone", true)) {
   const camBrowser = await chromium.launch({
     ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
     args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
@@ -1495,15 +1510,15 @@ const checks = results.flatMap((r) => r.checks);
 const bySuite = Object.entries(SUITES).map(([n, name]) => {
   const rs = results.filter((r) => r.suite === Number(n));
   const cs = rs.flatMap((r) => r.checks);
-  return `| ${n} | ${name} | ${rs.length} | ${rs.filter((r) => r.status === "passed").length} | ${rs.filter((r) => r.status !== "passed").length} | ${cs.filter((c) => c.ok).length}/${cs.length} |`;
+  return `| ${n} | ${name} | ${rs.length} | ${rs.filter((r) => r.status === "passed").length} | ${rs.filter((r) => r.status !== "passed").length} | ${skipped.filter((r) => r.suite === Number(n)).length} | ${cs.filter((c) => c.ok).length}/${cs.length} |`;
 });
 const lines = [
   "# Scenario test report",
   "",
-  `Run against ${BASE} on ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC in Chromium (Playwright ${(await import("playwright-core/package.json", { with: { type: "json" } })).default.version}). ${passed} of ${results.length} runs passed; ${checks.filter((c) => c.ok).length} of ${checks.length} checks passed.`,
+  `Run against ${BASE} on ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC in Chromium (Playwright ${(await import("playwright-core/package.json", { with: { type: "json" } })).default.version}). ${passed} of ${results.length} runs passed; ${checks.filter((c) => c.ok).length} of ${checks.length} checks passed.${skipped.length ? ` ${skipped.length} ${skipped.length === 1 ? "run was" : "runs were"} skipped because they need the preview sign-in (REAL_SIGN_IN=1); they are listed under "Skipped".` : ""}`,
   "",
-  "| Suite | Name | Runs | Passed | Failed | Checks |",
-  "| --- | --- | --- | --- | --- | --- |",
+  "| Suite | Name | Runs | Passed | Failed | Skipped | Checks |",
+  "| --- | --- | --- | --- | --- | --- | --- |",
   ...bySuite,
   "",
   "| Scenario | Device | Result | Checks |",
@@ -1520,6 +1535,9 @@ const lines = [
     ? results.flatMap((r) => r.checks.filter((c) => !c.ok).map((c) => `- ${r.id} ${r.device}: ${c.what}`))
     : ["None."]),
   "",
+  ...(skipped.length
+    ? ["## Skipped", "", "Not run: this site signs people in for real, so the preview's account doesn't exist here. The full local run covers these.", "", "| Scenario | Device | Suite |", "| --- | --- | --- |", ...skipped.map((r) => `| ${r.id} ${r.title} | ${r.device} | ${r.suite} |`), ""]
+    : []),
   "## Load",
   "",
   "| Device | Largest paint | DOM ready | Load | Layout shift | Transferred |",
@@ -1528,7 +1546,7 @@ const lines = [
   "",
 ];
 writeFileSync(join(OUT, "report.md"), lines.join("\n"));
-writeFileSync(join(OUT, "report.json"), JSON.stringify({ base: BASE, results, perf }, null, 2));
+writeFileSync(join(OUT, "report.json"), JSON.stringify({ base: BASE, results, skipped, perf }, null, 2));
 console.log(lines.join("\n"));
 // A filter that selects nothing is a failure, never an empty pass.
 process.exit(results.length > 0 && passed === results.length ? 0 : 1);
