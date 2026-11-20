@@ -71,7 +71,7 @@ export default async function (H) {
     await p.goto(`${BASE}/looks?mode=light`);
     await p.waitForTimeout(800);
     check((await p.locator("a.a-rail-card").count()) === 1, "signing in again brings it back");
-  });
+  }, { previewSignIn: true });
 
   await scenario("P3-9d", "A styling request cancelled while it runs keeps the answers and can be sent again", "phone", async (p) => {
     await answer(p, A);

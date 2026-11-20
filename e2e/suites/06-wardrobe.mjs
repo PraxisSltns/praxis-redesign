@@ -214,5 +214,5 @@ export default async function (H) {
     await p.goto(`${BASE}/wardrobe?mode=light`);
     await p.waitForTimeout(600);
     check(/Steel watch/.test(await body(p)), "signing in again brings it back");
-  });
+  }, { previewSignIn: true });
 }
