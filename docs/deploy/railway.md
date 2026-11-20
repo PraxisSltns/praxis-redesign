@@ -2,22 +2,37 @@
 
 Staging is built from `main` after `ci.yml` passes on it (see `docs/deploy/ci.md`). Only staging is set up here: no production environment and no paid resource beyond the plan Praxis already pays for, and only once the written spend approval exists.
 
-The gateway's build and deploy settings are in `railway.json` at the repository root (config as code). The dashboard steps below are what the file can't hold. Values in the file override the dashboard.
+Railway stops reading `railway.json` on 2026-12-01. Since 2026-11-21 the repository's Railway settings are in `.railway/railway.ts` (Infrastructure as Code), and `railway.json` is gone.
 
-## What `railway.json` sets for the gateway
+- **Staging's services** (gateway, ai, Postgres, Redis) are set in the dashboard, by the steps below. None of them read a config file. `.railway/railway.ts` declares nothing in staging, so applying it there changes nothing.
+- **The existing service** (`praxis-redesign`, production environment) is the only one the file manages.
+
+Nothing in `.railway/` applies on a push. A change reaches Railway only through these commands, run by hand:
+
+```
+npm ci                                                   # the file needs the `railway` package
+railway config plan  --environment production --verbose  # preview, changes nothing
+railway config apply --environment production            # applies, and starts a deploy of that service
+```
+
+## The gateway's settings (staging, in the dashboard)
+
+These were entered by hand in Week 2, from the old `railway.json`. Check them in the gateway's Settings if a deploy behaves differently.
 
 | Setting | Value | Why |
 |---|---|---|
-| Builder | `Dockerfile` | the same image as today |
+| Builder | `Dockerfile` | the same image as the existing service |
 | Start | `npm run start` | `node server/index.mjs` |
-| Pre-deploy (`staging` environment only) | `npm run db:migrate` | migrations run once per deploy, before traffic moves. A failed migration stops the deploy and the old one keeps serving. Set only under `environments.staging`, so the existing service, which has no database, isn't affected |
+| Pre-deploy | `npm run db:migrate` | migrations run once per deploy, before traffic moves. A failed migration stops the deploy and the old one keeps serving |
 | Health check | `GET /api/health`, 120 s | a deploy goes live only once it answers 200 |
-| Restart | on failure, up to 5 times | |
-| Watch paths | everything except `docs/`, `README.md`, `.github/`, `e2e/`, `video/`, `tools/` | a docs-only or test-only commit doesn't redeploy |
+| Restart | on failure | |
+| Watch paths | everything except `docs/`, `README.md`, `.github/`, `e2e/`, `video/`, `tools/`, `services/` | a docs-only or test-only commit doesn't redeploy |
 
 ## The existing service: read this first
 
-The project already has a service whose public address is `praxis-redesign-production.up.railway.app`. It deploys from `main`, and `smoke.yml` tests it. These steps don't touch its settings, but `railway.json` applies to every service built from this repository. It gains the health check, the restart policy and the watch paths. It doesn't gain the pre-deploy migration, which is set for `staging` only. Its start command and Dockerfile are the same as before. While it still deploys from `main`, every approved release pull request deploys it as well as staging. Decide whether it becomes staging, keeps running as a demo, or stops auto-deploying (Settings > Source > Disconnect, or switch its trigger branch). Don't remove it without the owner's say.
+The project already has a service whose public address is `praxis-redesign-production.up.railway.app`, in the `production` environment. It deploys from `main`, and Tarek decided to keep it as it is.
+
+**It is frozen on the build of 2026-10-30, on purpose.** Its settings run `npm run db:migrate` before each deploy, and it has no database. So every deploy since then fails at that step and the October build keeps serving. `.railway/railway.ts` keeps that step (decided 2026-11-21). Removing `preDeploy` there and applying un-freezes it: the next merge to `main` then deploys the current build to it. Only do that by decision. Don't remove the service without the owner's say.
 
 ## Dashboard steps (a project admin)
 
@@ -56,7 +71,7 @@ The project already has a service whose public address is `praxis-redesign-produ
 
    Use the service names as they appear in your project (`Postgres`, `Redis`, `Bucket` are the defaults). Don't set `GEMINI_API_KEY`, any `AI_PROVIDER_*` or `RETAIL_SHOPIFY_STORE` on staging without the owner's approval. A Gemini key on its own switches on the budgeted outfit pictures (`server/ai.mjs`, `APPROVED_DEFAULTS`).
 8. **The ai service** (`services/ai`). New > GitHub repo, same repository, then:
-   - Settings > Source: root directory `services/ai`, branch `main`, Wait for CI on. It builds from `services/ai/Dockerfile` with `services/ai/railway.json` (health check `/health`).
+   - Settings > Source: root directory `services/ai`, branch `main`, Wait for CI on. It builds from `services/ai/Dockerfile`. Settings > Deploy: health check `/health`, 120 s; restart on failure. Settings > Build: watch paths `services/ai/**`, `!services/ai/tests/**`.
    - **Don't generate a public domain.**
    - Name the service `ai`.
    - Variables: `PORT=8000`, `TORCH_THREADS=8`, `OMP_NUM_THREADS=8` (match the memory/CPU plan: the container sees the host's 48 CPUs but may use 8, and with 48 threads a text vector took 11 s instead of 0.05 s). Leave `HOST` unset: it defaults to `::`, the private network's IPv6. `CUTOUT_MODEL` is a build-time choice (the image bakes the weights): leave it at `full`.
@@ -82,7 +97,7 @@ The project already has a service whose public address is `praxis-redesign-produ
 - The deploy log shows the pre-deploy step (`npm run db:migrate`) before the health check.
 - `curl https://<staging domain>/api/health` answers `{"ok": true, ...}` with the commit that was merged.
 - Run the smoke test against it: Actions > "Smoke test live site" > Run workflow, with the staging address.
-- In the staging gateway's Settings > Deploy, the pre-deploy command shows `npm run db:migrate` (from `environments.staging` in `railway.json`). In the existing service it stays empty. If staging doesn't show it, the environment isn't named exactly `staging`.
+- In the staging gateway's Settings > Deploy, the pre-deploy command shows `npm run db:migrate`.
 
 ## Sign-in on staging
 
